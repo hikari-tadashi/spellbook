@@ -1,5 +1,6 @@
 # spellbook
 ## Prereqs
+Python 3.14+
 [Obisidan Notebook](https://obsidian.md/)
 
 ## Usage

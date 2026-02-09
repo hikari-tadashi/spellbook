@@ -1,18 +1,20 @@
 import os
+import sys
+import shutil
 from pathlib import Path
 
 def create_spellbook_structure():
     # Define the root directory name
-    root = "content"
+    root = "./"
     
     # List of directories to create (nested paths included)
     directories = [
-        "archive",
-        "assets",
-        "journal",
-        "maps/backlinks",
-        "maps/hubs",
-        "maps/notes",
+        "content/archive",
+        "content/assets",
+        "content/journal",
+        "content/maps/backlinks",
+        "content/maps/tag-hubs",
+        "content/notes",
         "inbox",
         "infrastructure/documentation",
         "infrastructure/scripts",
@@ -42,6 +44,12 @@ def create_spellbook_structure():
             print(f"Created file: {file_path}")
         else:
             print(f"File already exists: {file_path}")
+
+
+    # TODO: move awaken_spellbook.py into infrastructure/scripts
+    current_location = os.path.realpath(__file__)
+    destination_dir = Path(root) / "infrastructure/scripts/"
+    shutil.move(current_location, f"{destination_dir}/awaken.py")
 
     print("\nStructure setup complete!")
 

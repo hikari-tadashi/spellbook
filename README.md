@@ -2,7 +2,9 @@
 An enchanting notebook for managing all sorts of notes and data
 
 ## Prereqs
+- Linux
 - Python 3.14+
+- Bash
 - [Obisidan Notebook](https://obsidian.md/)
 
 ## Usage

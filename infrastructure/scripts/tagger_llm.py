@@ -2,18 +2,26 @@ import sys
 import json
 import os
 import requests
+import argparse
 
-# cogito:8b seems to follow the rules better
-MODEL = "cogito:8b"
+# cogito:8b seems to follow the rules better then Llama3.1:8b
+# trying out granite, lets see how IBM does
+MODEL = "granite4:3b"
 API_URL = "http://localhost:11434/api/generate"
 #NOTES_DIR = "./notes"
-NOTES_DIR = "../../content/notes"
+NOTES_DIR = "/home/chris/Lab/spellbook/content/notes"
 
 ALLOWED_TAGS = (
     "contacts, journal, messages, email, todo, calendar, alarm, science, technology, "
-    "engineering, mathematics, fine-arts, music, History, philosophy, logic, computers, "
+    "engineering, mathematics, fine-arts, music, history, philosophy, logic, computers, "
     "literature, movies, shows, family, friends, money, finances, business, project, code, other"
 )
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Tags notes using an LLM.")
+    parser.add_argument("-m", "--metadata", type=json.loads, default={},
+                        help="JSON dictionary of metadata to pass to the script.")
+    return parser.parse_args()
 
 def get_tags(content):
     prompt = (
@@ -37,6 +45,9 @@ def get_tags(content):
         return "#other"
 
 def main():
+    args = parse_args()
+    metadata = args.metadata
+
     # Ensure notes directory exists
     os.makedirs(NOTES_DIR, exist_ok=True)
 

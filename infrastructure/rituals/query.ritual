@@ -1,0 +1,10 @@
+# query.ritual
+# Queries the note graph using natural language via the LLM.
+# Reads a prompt from stdin, searches content/notes/, returns ranked results.
+#
+# Pipeline: prompt on stdin  →  retriever  →  LLM ranker  →  formatted output
+#
+# TODO: not yet implemented. Planned pipeline:
+#   python3 infrastructure/scripts/query_retriever.py
+#   python3 infrastructure/scripts/query_llm.py
+python3 -c "print('\nquery: this ritual is not yet built out.\nPlanned: tag hubs, wikis, zettels, and source files will be used as context for natural-language queries against the note graph.\n')"

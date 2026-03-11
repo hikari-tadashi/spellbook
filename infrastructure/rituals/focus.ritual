@@ -1,0 +1,15 @@
+# focus.ritual
+# Rebuilds the tag-hub index.
+#
+# Each non-blank, non-comment line is one process in a left-to-right pipeline:
+#   stdout of line N  →  stdin of line N+1
+#
+# Equivalent to the old focus-spellbook.sh:
+#   python3 tag_hub_generator.py | python3 tag_hub_populator.py
+#
+# Step 1: Read spellbook.conf + any extra tags file, emit canon-tags,
+#         and create empty tag-hub-<tag> stubs for any new tags.
+python3 infrastructure/scripts/tag_hub_generator.py
+# Step 2: Walk content/notes/, match #tags against canon-tags,
+#         and populate each tag-hub-<tag> file with the note filenames.
+python3 infrastructure/scripts/tag_hub_populator.py

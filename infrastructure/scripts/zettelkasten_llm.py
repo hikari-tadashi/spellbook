@@ -1,44 +1,57 @@
 import os
 import sys
+import re
 import json
 import shutil
-import requests
+import subprocess
 import argparse
+from datetime import datetime
 
-MODEL = "cogito:8b" 
-API_URL = "http://localhost:11434/api/generate"
+MODEL = "cogito:8b"
+OLLAMA_CALL = os.path.join(os.path.dirname(__file__), "ollama_call.py")
+CONFIG_READER = os.path.join(os.path.dirname(__file__), "config_reader.py")
+
+MAX_RETRIES = 3
+
+def get_config(section, key):
+    result = subprocess.run(
+        ["python3", CONFIG_READER, "-s", section, "-k", key],
+        capture_output=True, text=True, check=True
+    )
+    return result.stdout.strip()
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Breaks text into atomic Zettelkasten notes using an LLM.")
+    # Added a positional argument for the file to make it more robust
+    parser.add_argument("file", nargs="?", help="Path to the file to process.")
+    # metadata is required by spellbook script convention even if unused in this script.
     parser.add_argument("-m", "--metadata", type=json.loads, default={},
                         help="JSON dictionary of metadata to pass to the script.")
     return parser.parse_args()
 
+def strip_markdown_fences(text):
+    # LLMs commonly wrap JSON output in markdown code fences (```json ... ```) even
+    # when instructed not to. Strip them before parsing to avoid spurious failures.
+    text = text.strip()
+    match = re.match(r'^```(?:json)?\s*([\s\S]*?)\s*```$', text)
+    if match:
+        return match.group(1)
+    return text
+
 def get_zettel_json(content):
-    prompt = (
-        "Break the following text into atomic Zettelkasten notes. "
-        "Return ONLY a raw JSON list of strings, where each string is the content of an individual note. "
-        "Do not include titles or keys. No markdown formatting, no explanations.\n\n"
-        f"Text:\n{content}"
-    )
-    
-    payload = {
-        "model": MODEL,
-        "prompt": prompt,
-        "stream": False,
-        "format": "json" 
-    }
-    
     try:
-        response = requests.post(API_URL, json=payload)
-        response.raise_for_status()
-        return response.json()['response']
-    except Exception as e:
-        sys.stderr.write(f"LLM Call Error: {e}\n")
+        result = subprocess.run(
+            ["python3", OLLAMA_CALL, "-m", MODEL, "-f", "json",
+             "-s", "Break the following text into atomic Zettelkasten notes. Return ONLY a raw JSON list of strings, where each string is the content of an individual note. Do not include titles or keys. No markdown formatting, no explanations.",
+             "-u", content],
+            capture_output=True, text=True, check=True
+        )
+        return result.stdout
+    except subprocess.CalledProcessError as e:
+        sys.stderr.write(f"LLM Call Error: {e.stderr}\n")
         sys.exit(1)
 
 def flatten_llm_output(data):
-    """Recursively extracts all strings from whatever messy JSON the LLM returns."""
     flat_list = []
     if isinstance(data, list):
         for item in data:
@@ -47,60 +60,74 @@ def flatten_llm_output(data):
         for value in data.values():
             flat_list.extend(flatten_llm_output(value))
     elif isinstance(data, str):
-        # Only keep non-empty strings
         if data.strip():
             flat_list.append(data.strip())
     return flat_list
 
 def main():
     args = parse_args()
-    metadata = args.metadata
-    
+
     # Read filename from argument or stdin
+    filepath = args.file
+    if not filepath:
+        if not sys.stdin.isatty():
+            filepath = sys.stdin.read().strip()
+        else:
+            sys.stderr.write("Error: No file path provided.\n")
+            sys.exit(1)
+
+    archive_dir = get_config("spellbook", "archive")
+
     try:
-        # Note: sys.argv[1] might conflict with argparse if you use flags. 
-        # Kept as you wrote it for now, assuming your workflow handles it.
-        filepath = sys.argv[1].strip() if len(sys.argv) > 1 and not sys.argv[1].startswith('-') else sys.stdin.read().strip()
         with open(filepath, 'r', encoding='utf-8') as f:
             text_content = f.read()
-            
-        # Hacked move
-        shutil.move(filepath, "/home/chris/Lab/spellbook/content/archive")
     except Exception as e:
         sys.stderr.write(f"File Error: {e}\n")
         sys.exit(1)
 
-    # Get JSON from LLM
-    zettel_json = get_zettel_json(text_content)
-    
+    # Retry LLM call up to MAX_RETRIES times if JSON parsing fails.
+    # strip_markdown_fences handles the most common formatting mistake before each attempt.
+    zettel_data = None
+    for attempt in range(1, MAX_RETRIES + 1):
+        zettel_json = get_zettel_json(text_content)
+        cleaned = strip_markdown_fences(zettel_json)
+        try:
+            raw_data = json.loads(cleaned)
+            zettel_data = flatten_llm_output(raw_data)
+            break
+        except json.JSONDecodeError:
+            sys.stderr.write(f"Warning: LLM output was not valid JSON (attempt {attempt}/{MAX_RETRIES}).\n")
+            if attempt == MAX_RETRIES:
+                sys.stderr.write("Error: All retry attempts exhausted. No notes created.\n")
+                print(json.dumps([]))
+                sys.exit(0)
+
+    if not zettel_data:
+        sys.stderr.write("Error: LLM returned empty data.\n")
+        print("[]")
+        sys.exit(0)
+
+    filename = os.path.basename(filepath)
+    archived_path = os.path.join(archive_dir, filename)
+    source_link = f"Source: [[{archived_path}]]"
+
+    for i in range(len(zettel_data)):
+        zettel_data[i] = f"{zettel_data[i]}\n\n{source_link}"
+
+    print(json.dumps(zettel_data, indent=2))
+
+    # Archive only after successful LLM processing.
+    # If a file with the same name already exists in the archive, append a timestamp
+    # to the filename rather than overwriting or failing.
     try:
-        # Parse the JSON string
-        raw_data = json.loads(zettel_json)
-        
-        # Bulldoze the data into a flat 1D list of strings
-        zettel_data = flatten_llm_output(raw_data)
-        
-        # Safety check: if the LLM completely blanked
-        if not zettel_data:
-            sys.stderr.write("Error: LLM returned empty data. Nothing to tag.\n")
-            print("[]") # Pass empty JSON to the next pipe so it doesn't break
-            sys.exit(0)
-        
-        # Extract just the filename from the path and format it
-        filename = os.path.basename(filepath)
-        formatted_filename = filename.replace(" ", "-")
-        tag = f"#filename-{formatted_filename}"
-        
-        # Append the tag to the end of each note
-        for i in range(len(zettel_data)):
-            zettel_data[i] = f"{zettel_data[i]}\n\n{tag}"
-            
-        # Convert the list back to JSON and print to stdout
-        print(json.dumps(zettel_data, indent=2))
-        
-    except json.JSONDecodeError:
-        sys.stderr.write("Error: LLM output was not valid JSON.\n")
-        print(json.dumps([])) # Output empty JSON list to prevent breaking pipelines
+        if os.path.exists(archived_path):
+            ts = datetime.now().strftime("%Y%m%d%H%M%S")
+            name, ext = os.path.splitext(filename)
+            archived_path = os.path.join(archive_dir, f"{name}-{ts}{ext}")
+        shutil.move(filepath, archived_path)
+    except Exception as e:
+        sys.stderr.write(f"Archive Error: {e}\n")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()

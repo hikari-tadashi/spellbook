@@ -1,15 +1,24 @@
 import sys
 import json
 import os
-import requests
+import subprocess
 import argparse
+from datetime import datetime, timedelta
 
 # cogito:8b seems to follow the rules better then Llama3.1:8b
 # trying out granite, lets see how IBM does
 MODEL = "granite4:3b"
-API_URL = "http://localhost:11434/api/generate"
-#NOTES_DIR = "./notes"
-NOTES_DIR = "/home/chris/Lab/spellbook/content/notes"
+OLLAMA_CALL = os.path.join(os.path.dirname(__file__), "ollama_call.py")
+CONFIG_READER = os.path.join(os.path.dirname(__file__), "config_reader.py")
+
+MAX_RETRIES = 3
+
+def get_config(section, key):
+    result = subprocess.run(
+        ["python3", CONFIG_READER, "-s", section, "-k", key],
+        capture_output=True, text=True, check=True
+    )
+    return result.stdout.strip()
 
 ALLOWED_TAGS = (
     "contacts, journal, messages, email, todo, calendar, alarm, science, technology, "
@@ -24,29 +33,71 @@ def parse_args():
     return parser.parse_args()
 
 def get_tags(content):
-    prompt = (
-        f"Analyze this text and select tags strictly from this list: [{ALLOWED_TAGS}]. "
-        "Avoid 'other' unless necessary. Use tags moderately. "
-        "Return ONLY the selected tags formatted with hash signs (e.g. #science #logic)."
-        f"\n\nText:\n{content}"
-    )
-    
-    payload = {
-        "model": MODEL,
-        "prompt": prompt,
-        "stream": False
-    }
-    
+    # Tags are passed through as-is from the LLM without strict validation.
+    # Drift from ALLOWED_TAGS (extra tags, varied phrasing) is intentional:
+    # the garden process downstream is responsible for normalising and curating tags.
     try:
-        response = requests.post(API_URL, json=payload)
-        return response.json()['response'].strip()
-    except Exception as e:
-        sys.stderr.write(f"Tagging Error: {e}\n")
+        result = subprocess.run(
+            ["python3", OLLAMA_CALL, "-m", MODEL,
+             "-s", f"Select tags strictly from this list: [{ALLOWED_TAGS}]. Avoid 'other' unless necessary. Use tags moderately. Return ONLY the selected tags formatted with hash signs (e.g. #science #logic).",
+             "-u", content],
+            capture_output=True, text=True, check=True
+        )
+        return result.stdout.strip()
+    except subprocess.CalledProcessError as e:
+        sys.stderr.write(f"Tagging Error: {e.stderr}\n")
         return "#other"
+
+def write_note(notes_dir, title, final_content):
+    """Write a note, handling filename collisions by reassigning timestamps to both files.
+
+    When a collision occurs the existing file and the new note each receive a fresh
+    timestamp filename and a #collision-{original_timestamp} tag so the garden process
+    can identify and reconcile them. Retried up to MAX_RETRIES times in case the
+    freshly generated timestamps also collide (unlikely but possible under rapid runs).
+    """
+    file_path = os.path.join(notes_dir, f"{title}.md")
+
+    for attempt in range(MAX_RETRIES + 1):
+        if not os.path.exists(file_path):
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(final_content)
+            return file_path
+
+        if attempt == MAX_RETRIES:
+            sys.stderr.write(f"Error: Could not resolve collision after {MAX_RETRIES} retries for {title}.\n")
+            return None
+
+        # Collision: strip both notes' old timestamp filenames, assign new ones,
+        # and tag both with the colliding timestamp so they can be found later.
+        collision_tag = f"#collision-{title}"
+
+        with open(file_path, "r", encoding="utf-8") as f:
+            existing_content = f.read()
+
+        now = datetime.now()
+        new_ts_existing = now.strftime("%Y%m%d%H%M%S")
+        new_ts_new = (now + timedelta(seconds=1)).strftime("%Y%m%d%H%M%S")
+
+        new_existing_path = os.path.join(notes_dir, f"{new_ts_existing}.md")
+        with open(new_existing_path, "w", encoding="utf-8") as f:
+            f.write(f"{existing_content}\n{collision_tag}")
+        os.remove(file_path)
+
+        title = new_ts_new
+        file_path = os.path.join(notes_dir, f"{new_ts_new}.md")
+        final_content = f"{final_content}\n{collision_tag}"
+
+        sys.stderr.write(
+            f"Collision (attempt {attempt + 1}): relocated existing note to {new_ts_existing}, "
+            f"retrying new note as {new_ts_new}.\n"
+        )
 
 def main():
     args = parse_args()
-    metadata = args.metadata
+    metadata = args.metadata  # Unused here but required by spellbook script convention.
+
+    NOTES_DIR = get_config("spellbook", "notes")
 
     # Ensure notes directory exists
     os.makedirs(NOTES_DIR, exist_ok=True)
@@ -63,15 +114,13 @@ def main():
     for title, content in zettels.items():
         tags = get_tags(content)
         final_content = f"{content}\n\n{tags}"
-        
+
         # Sanitize filename
-        safe_title = "".join([c for c in title if c.isalpha() or c.isdigit() or c==' ']).rstrip()
-        file_path = os.path.join(NOTES_DIR, f"{safe_title}.md")
-        
-        with open(file_path, "w", encoding="utf-8") as f:
-            f.write(final_content)
-        
-        print(f"Saved: {file_path}")
+        safe_title = "".join([c for c in title if c.isalpha() or c.isdigit() or c == ' ']).rstrip()
+
+        saved_path = write_note(NOTES_DIR, safe_title, final_content)
+        if saved_path:
+            print(f"Saved: {saved_path}")
 
 if __name__ == "__main__":
     main()

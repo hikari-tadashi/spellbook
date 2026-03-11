@@ -1,0 +1,8 @@
+# sleep.ritual
+# Generates wiki pages from tagged notes via the LLM.
+# Currently a single monolithic script; will be broken into pipeline steps
+# once wiki_generator_llm.py is decomposed into smaller rituals.
+#
+# TODO: split into:
+#   source_compiler.py | wiki_generator_llm.py | wiki_writer.py
+python3 infrastructure/scripts/wiki_generator_llm.py

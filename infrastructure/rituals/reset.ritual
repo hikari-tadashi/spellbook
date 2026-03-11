@@ -1,0 +1,6 @@
+# reset.ritual
+# Moves all archived content back to the inbox and wipes processed notes/maps.
+# WARNING: destructive. Useful for a clean re-ingest of everything.
+#
+# Reads paths from spellbook.conf via config_reader.py.
+python3 infrastructure/scripts/reset.py

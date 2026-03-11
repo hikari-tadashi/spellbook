@@ -1,0 +1,3 @@
+#absorb.ritual
+#absorbs notes in the inbox and processes them
+python3 infrastructure/scripts/inbox_picker.py | python3 infrastructure/scripts/zettelkasten_llm.py | python3 infrastructure/scripts/zettel_id_generator.py | python3 infrastructure/scripts/tagger_llm.py

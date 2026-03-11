@@ -1,0 +1,6 @@
+# wiki.ritual
+# Alias registered explicitly in [rituals] as "wiki=rituals/wiki.ritual".
+# Runs the wiki generator directly — same underlying script as the sleep ritual,
+# but exposed as a standalone command so it can be called independently
+# without triggering the full sleep cycle.
+python3 infrastructure/scripts/wiki_generator_llm.py

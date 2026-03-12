@@ -16,7 +16,16 @@
     (let [candidate (fs/path dir "spellbook.conf")]
       (cond
         (fs/exists? candidate) candidate
-        (= (str dir) (str (fs/parent dir))) (throw (ex-info "spellbook.conf not found" {}))
+        (or (nil? (fs/parent dir))
+            (= (str dir) (str (fs/parent dir)))) (throw (ex-info (str "spellbook.conf not found.\n\n"
+                                                                      "Run this script from within a spellbook project directory (or any subdirectory).\n"
+                                                                      "A minimal spellbook.conf looks like:\n\n"
+                                                                      "  [spellbook]\n"
+                                                                      "  root    = /path/to/your/spellbook\n"
+                                                                      "  rituals = infrastructure/rituals\n\n"
+                                                                      "Optionally register rituals by name:\n\n"
+                                                                      "  [rituals]\n"
+                                                                      "  my-ritual = infrastructure/rituals/my-ritual.ritual\n") {}))
         :else (recur (fs/parent dir))))))
 
 (defn parse-conf

@@ -7,14 +7,14 @@
   ;; Run from infrastructure/scripts/:
   ;;   bb package
   package
-  {:doc      "Bundle install_spellbook.clj into a standalone executable installer"
+  {:doc      "Bundle spellbook_cli.clj into a standalone executable script"
    :requires ([babashka.fs :as fs] [clojure.string :as str])
    :task     (do
 
            (let [excluded-dirs  #{"old" "export" "__pycache__"}
                  excluded-files #{"bb-linux" "bb-mac"}
-                 out-file       "spellbook-installer"
-                 src-file       "install_spellbook.clj"
+                 out-file       "spellbook_cli"
+                 src-file       "spellbook_cli.clj"
                  scripts-src    "."
                  rituals-src    (str (fs/path ".." "rituals"))]
 
@@ -52,27 +52,28 @@
                         (str (fs/absolutize "bb.exe")) "bb")]
                (shell bb "uberscript" out-file src-file))
              (.setExecutable (java.io.File. out-file) true)
-             (println (str "[OK] Executable installer ready: "
+             (println (str "[OK] Executable script ready: "
                            (fs/absolutize out-file)))))}
 
   ;; ── build-exe ─────────────────────────────────────────────────────────────
-  ;; Produces a fully self-contained install_spellbook.exe by concatenating
+  ;; Produces a fully self-contained spellbook_cli.exe by concatenating
   ;; bb.exe with an uberjar.  Scripts (.py/.clj/.sh) and .ritual files are
   ;; embedded as classpath resources inside the JAR; no cabinet or IExpress.
   ;; Run from infrastructure/scripts/:
   ;;   bb build-exe
   build-exe
-  {:doc      "Create a standalone install_spellbook.exe (bb.exe + uberjar, no IExpress)"
+  {:doc      "Create a standalone spellbook_cli.exe (bb.exe + uberjar, no IExpress)"
    :requires ([babashka.fs :as fs] [clojure.string :as str] [clojure.java.io :as io])
    :task     (do
 
      (let [excluded-dirs  #{"old" "export" "__pycache__"}
            excluded-files #{"bb-linux" "bb-mac"}
+           src-file       "spellbook_cli.clj"
            scripts-src    (str (fs/absolutize "."))
            rituals-src    (str (fs/absolutize (fs/path ".." "rituals")))
            resources-dir  (str (fs/absolutize "resources"))
-           jar-path       (str (fs/absolutize "install_spellbook.jar"))
-           out-exe        (str (fs/absolutize "install_spellbook.exe"))
+           jar-path       (str (fs/absolutize "spellbook_cli.jar"))
+           out-exe        (str (fs/absolutize "spellbook_cli.exe"))
            bb-src         (str (fs/path scripts-src "bb.exe"))]
 
        ;; ── Prerequisites ───────────────────────────────────────────────────
@@ -99,7 +100,7 @@
                                    (and (or (str/ends-with? n ".py")
                                             (str/ends-with? n ".sh")
                                             (str/ends-with? n ".clj"))
-                                        (not= n "install_spellbook.clj"))))
+                                        (not= n src-file))))
                rituals (if (fs/exists? rituals-src)
                          (collect rituals-src (fn [n] (str/ends-with? n ".ritual")))
                          (do (println "    [!] rituals/ dir not found — skipping") []))]
@@ -123,7 +124,18 @@
                         {:replace-existing true})
                (println (str "    + rituals/" r)))
              (spit (str (fs/path res-rituals "MANIFEST"))
-                   (str/join "\n" rituals)))
+                   (str/join "\n" rituals))
+
+             ;; Stage bb binary so the installer can drop it into scripts/
+             (let [bb-bin-name (if (str/starts-with? (str/lower-case (System/getProperty "os.name")) "windows")
+                                 "bb.exe" "bb")
+                   bb-bin-src  (str (fs/path scripts-src bb-bin-name))]
+               (if (fs/exists? bb-bin-src)
+                 (do (fs/copy bb-bin-src
+                              (str (fs/path res-scripts bb-bin-name))
+                              {:replace-existing true})
+                     (println (str "    + scripts/" bb-bin-name)))
+                 (println (str "    [!] " bb-bin-name " not found in scripts/ — skipping")))))
            (println)))
 
        ;; ── Step 2: Build uberjar ────────────────────────────────────────────
@@ -131,11 +143,11 @@
        (when (fs/exists? jar-path) (fs/delete jar-path))
        (let [bb (if (str/starts-with? (str/lower-case (System/getProperty "os.name")) "windows")
                   (str (fs/absolutize "bb.exe")) "bb")]
-         (shell bb "uberjar" jar-path "-m" "install-spellbook"))
+         (shell bb "uberjar" jar-path "-m" "spellbook-cli"))
        (println)
 
        ;; ── Step 3: Concatenate bb.exe + jar → exe ───────────────────────────
-       (println "[*] Step 3 — Concatenating bb.exe + jar -> install_spellbook.exe...")
+       (println "[*] Step 3 — Concatenating bb.exe + jar -> spellbook_cli.exe...")
        (when (fs/exists? out-exe) (fs/delete out-exe))
        (with-open [out (java.io.FileOutputStream. out-exe)]
          (doseq [f [bb-src jar-path]]
@@ -154,7 +166,7 @@
   clean
   {:doc      "Remove build artefacts produced by `package` and `build-exe`"
    :requires ([babashka.fs :as fs])
-   :task     (doseq [f ["spellbook-installer" "install_spellbook.exe" "install_spellbook.jar" "resources"]]
+   :task     (doseq [f ["spellbook_cli" "spellbook_cli.exe" "spellbook_cli.jar" "resources"]]
                (when (fs/exists? f)
                  (if (fs/directory? f)
                    (fs/delete-tree f)

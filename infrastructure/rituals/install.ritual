@@ -1,0 +1,5 @@
+# install.ritual
+# Runs the Spellbook installation wizard using the bundled bb runtime.
+# Python resolves the correct bb binary name across platforms (bb.exe / bb),
+# keeping this portable without shell-level conditionals.
+python3 -c "import subprocess,sys,os; p=os.path.join; bb=p('infrastructure','scripts','bb.exe'if sys.platform=='win32'else'bb'); subprocess.run([bb,p('infrastructure','scripts','install_spellbook.clj')])"

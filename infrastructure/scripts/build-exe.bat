@@ -11,7 +11,7 @@ if not exist "bb.exe" (
     exit /b 1
 )
 
-echo [*] Building Spellbook installer EXE via bb build-exe...
+echo [*] Building spellbook_cli.exe via bb build-exe...
 echo.
 bb.exe build-exe
 
@@ -19,7 +19,7 @@ echo.
 if %ERRORLEVEL% NEQ 0 (
     echo [X] Build failed with error code %ERRORLEVEL%.
 ) else (
-    echo [OK] Build complete: %~dp0install_spellbook.exe
+    echo [OK] Build complete: %~dp0spellbook_cli.exe
 )
 endlocal
 pause

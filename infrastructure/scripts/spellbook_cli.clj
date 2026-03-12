@@ -1,8 +1,9 @@
 #!/usr/bin/env bb
 
-(require '[babashka.process :refer [process]]
-         '[babashka.fs :as fs]
-         '[clojure.string :as str])
+(ns spellbook-cli
+  (:require [babashka.process :refer [process]]
+            [babashka.fs :as fs]
+            [clojure.string :as str]))
 
 ;; ---------------------------------------------------------------------------
 ;; Config Parsing
@@ -122,19 +123,24 @@
       (doseq [name (sort (keys rituals))]
         (println (str "  " name))))))
 
-(let [conf-path   (find-conf)
-      conf        (parse-conf conf-path)
-      working-dir (fs/parent conf-path)
-      rituals     (discover-rituals conf-path conf)
-      [cmd & _]   *command-line-args*]
-  (cond
-    (or (nil? cmd) (= cmd "list"))
-    (list-rituals! rituals)
+(defn -main [& args]
+  (let [conf-path   (find-conf)
+        conf        (parse-conf conf-path)
+        working-dir (fs/parent conf-path)
+        rituals     (discover-rituals conf-path conf)
+        [cmd & _]   args]
+    (cond
+      (or (nil? cmd) (= cmd "list"))
+      (list-rituals! rituals)
 
-    :else
-    (if-let [ritual-path (get rituals cmd)]
-      (System/exit (run-ritual! cmd ritual-path working-dir))
-      (do
-        (println (str "Unknown ritual: '" cmd "'"))
-        (list-rituals! rituals)
-        (System/exit 1)))))
+      :else
+      (if-let [ritual-path (get rituals cmd)]
+        (System/exit (run-ritual! cmd ritual-path working-dir))
+        (do
+          (println (str "Unknown ritual: '" cmd "'"))
+          (list-rituals! rituals)
+          (System/exit 1))))))
+
+;; Support direct `bb spellbook_cli.clj` invocation alongside uberjar -main dispatch.
+(when (= *file* (System/getProperty "babashka.file"))
+  (apply -main *command-line-args*))

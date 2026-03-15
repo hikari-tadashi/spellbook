@@ -27,7 +27,7 @@ import json
 
 
 DEFAULT_MODEL   = "cogito:8b"
-DEFAULT_HOST    = "http://localhost:11434"
+DEFAULT_HOST    = "http://192.168.68.62:11434"
 DEFAULT_TIMEOUT = 300
 
 

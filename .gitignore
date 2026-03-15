@@ -2,3 +2,8 @@
 .lsp
 .clj-kondo
 **/__pycache__/
+spellbook.conf
+**/bb.exe
+inbox
+content
+projects

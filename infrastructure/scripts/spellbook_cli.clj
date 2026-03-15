@@ -103,9 +103,11 @@
     ["sh" "-c"]))
 
 (defn run-ritual!
-  "Runs a named ritual from a ritual path. Returns exit code (0 = success)."
-  [name ritual-path working-dir]
-  (let [commands (vec (load-ritual ritual-path))]
+  "Runs a named ritual from a ritual path. Returns exit code (0 = success).
+   extra-args, if provided, are appended to each command in the ritual."
+  [name ritual-path working-dir & [extra-args]]
+  (let [commands  (vec (load-ritual ritual-path))
+        args-str  (when (seq extra-args) (str " " (str/join " " extra-args)))]
     (if (empty? commands)
       (do (println (str "ritual '" name "' has no commands.")) 1)
       (do
@@ -113,7 +115,8 @@
         (loop [[cmd & rest-cmds] commands step 0]
           (if-not cmd
             (do (println "✓ Done.") 0)
-            (let [exit (:exit @(apply process {:dir (str working-dir) :out :inherit :err :inherit} (conj shell-args cmd)))]
+            (let [full-cmd (str cmd args-str)
+                  exit     (:exit @(apply process {:dir (str working-dir) :out :inherit :err :inherit} (conj shell-args full-cmd)))]
               (if (= 0 exit)
                 (recur rest-cmds (inc step))
                 (do
@@ -137,14 +140,14 @@
         conf        (parse-conf conf-path)
         working-dir (fs/parent conf-path)
         rituals     (discover-rituals conf-path conf)
-        [cmd & _]   args]
+        [cmd & extra-args] args]
     (cond
       (or (nil? cmd) (= cmd "list"))
       (list-rituals! rituals)
 
       :else
       (if-let [ritual-path (get rituals cmd)]
-        (System/exit (run-ritual! cmd ritual-path working-dir))
+        (System/exit (run-ritual! cmd ritual-path working-dir extra-args))
         (do
           (println (str "Unknown ritual: '" cmd "'"))
           (list-rituals! rituals)

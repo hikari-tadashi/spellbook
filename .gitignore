@@ -4,6 +4,7 @@
 **/__pycache__/
 spellbook.conf
 **/bb.exe
+**/bb-*
 inbox
 content
 projects

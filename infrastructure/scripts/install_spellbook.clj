@@ -48,6 +48,18 @@
   [& parts]
   (str (apply fs/path (map str parts))))
 
+(defn expand-path
+  "Expand a leading ~ to the user's home directory, using the correct
+  path separator for the current platform."
+  [path]
+  (when path
+    (if (str/starts-with? path "~")
+      (let [after-tilde (str/replace-first path #"^~[/\\]?" "")]
+        (if (str/blank? after-tilde)
+          (home-dir)
+          (str (fs/path (home-dir) after-tilde))))
+      path)))
+
 ;; ── Print Helpers ─────────────────────────────────────────────────────────────
 
 (defn info  [msg] (println (str CYAN  "[*]"  RESET " " msg)))
@@ -73,7 +85,7 @@
               (when default (str " [" default "]"))
               ": "))
   (flush)
-  (let [line (read-line)]
+  (let [line (str/trim (or (read-line) ""))]
     (if (str/blank? line) default line)))
 
 (defn confirm
@@ -179,7 +191,7 @@
         onedrive   (detect-onedrive)
         local-docs (p (home-dir) "Documents" "spellbook")]
     (if conf-dir
-      conf-dir
+      (expand-path conf-dir)
       (if onedrive
         (let [od-spellbook (p onedrive "spellbook")]
           (info (str "OneDrive detected at: " onedrive))
@@ -194,7 +206,7 @@
           (println)
           (case (prompt "Choice" "1")
             "2" (do (ok "The cloud realm is chosen. May your connection never waver.") od-spellbook)
-            "3" (prompt "Enter full install path" nil)
+            "3" (expand-path (prompt "Enter full install path" nil))
             (do (ok "Local stone it is. Solid, dependable, yours alone.") local-docs)))
         (do
           (info "No cloud realm detected. The Spellbook shall root itself locally.")
@@ -204,7 +216,7 @@
           (println "  2)  Custom path")
           (println)
           (if (= "2" (prompt "Choice" "1"))
-            (prompt "Enter full install path" nil)
+            (expand-path (prompt "Enter full install path" nil))
             local-docs))))))
 
 ;; =============================================================================
@@ -570,4 +582,5 @@
             (flush)
             (read-line)))))))
 
-(-main *command-line-args*)
+(when (= *file* (System/getProperty "babashka.file"))
+  (apply -main *command-line-args*))

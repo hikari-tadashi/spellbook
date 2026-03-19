@@ -135,23 +135,63 @@
       (doseq [name (sort (keys rituals))]
         (println (str "  " name))))))
 
-(defn -main [& args]
-  (let [conf-path   (find-conf)
-        conf        (parse-conf conf-path)
-        working-dir (fs/parent conf-path)
-        rituals     (discover-rituals conf-path conf)
-        [cmd & extra-args] args]
-    (cond
-      (or (nil? cmd) (= cmd "list"))
-      (list-rituals! rituals)
+;; ---------------------------------------------------------------------------
+;; First-run menu (no spellbook.conf found)
+;; ---------------------------------------------------------------------------
 
-      :else
-      (if-let [ritual-path (get rituals cmd)]
-        (System/exit (run-ritual! cmd ritual-path working-dir extra-args))
-        (do
-          (println (str "Unknown ritual: '" cmd "'"))
-          (list-rituals! rituals)
-          (System/exit 1))))))
+(defn first-run-menu! []
+  (println)
+  (println "No spellbook.conf found.")
+  (println)
+  (println "  1) Fresh install  — create a new Spellbook (directories + spellbook.conf)")
+  (println "  2) Minimal setup  — write a spellbook.conf for an existing directory")
+  (println "  3) Exit")
+  (println)
+  (print "[?] Choice [1]: ")
+  (flush)
+  (let [choice (str/trim (or (read-line) ""))]
+    (case (if (str/blank? choice) "1" choice)
+      "2" (do (require '[create-conf])
+              ((resolve 'create-conf/-main))
+              (System/exit 0))
+      "3" (System/exit 0)
+      (do (require '[install-spellbook])
+          ((resolve 'install-spellbook/-main))
+          (System/exit 0)))))
+
+;; ---------------------------------------------------------------------------
+;; Main
+;; ---------------------------------------------------------------------------
+
+(defn -main [& args]
+  (let [[cmd & extra-args] args]
+    (if (= cmd "install")
+      ;; "install" is always handled directly — warn if an existing conf is nearby
+      (do
+        (when-let [existing (try (find-conf) (catch Exception _ nil))]
+          (println (str "[!] Note: a spellbook.conf was already found at " (str existing)))
+          (println "    You can proceed to create a new installation at a different location."))
+        (require '[install-spellbook])
+        ((resolve 'install-spellbook/-main))
+        (System/exit 0))
+      ;; Normal flow: walk up dirs for a conf
+      (let [conf-path (try (find-conf) (catch Exception _ nil))]
+        (if (nil? conf-path)
+          (first-run-menu!)
+          (let [conf        (parse-conf conf-path)
+                working-dir (fs/parent conf-path)
+                rituals     (discover-rituals conf-path conf)]
+            (cond
+              (or (nil? cmd) (= cmd "list"))
+              (list-rituals! rituals)
+
+              :else
+              (if-let [ritual-path (get rituals cmd)]
+                (System/exit (run-ritual! cmd ritual-path working-dir extra-args))
+                (do
+                  (println (str "Unknown ritual: '" cmd "'"))
+                  (list-rituals! rituals)
+                  (System/exit 1))))))))))
 
 ;; Support direct `bb spellbook_cli.clj` invocation alongside uberjar -main dispatch.
 (when (= *file* (System/getProperty "babashka.file"))

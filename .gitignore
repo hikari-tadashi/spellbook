@@ -8,3 +8,4 @@ spellbook.conf
 inbox
 content
 projects
+infrastructure/plugins/*

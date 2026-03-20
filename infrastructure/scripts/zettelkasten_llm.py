@@ -20,6 +20,11 @@ def get_config(section, key):
     )
     return result.stdout.strip()
 
+try:
+    MODEL = get_config("spellbook", "ollama_model")
+except subprocess.CalledProcessError:
+    pass
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Breaks text into atomic Zettelkasten notes using an LLM.")
     # Added a positional argument for the file to make it more robust

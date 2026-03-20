@@ -101,7 +101,7 @@
         _           (print (str "[?] Root directory [" default-dir "]: "))
         _           (flush)
         input       (str/trim (or (read-line) ""))
-        install-dir (if (str/blank? input) default-dir input)
+        install-dir (str (fs/expand-home (if (str/blank? input) default-dir input)))
         out-path    (p install-dir "spellbook.conf")]
 
     (println (str "[*] Writing : " out-path))

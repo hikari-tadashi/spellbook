@@ -21,9 +21,9 @@ Exit codes:
 """
 
 import sys
+import re
 import argparse
 import requests
-import json
 
 
 DEFAULT_MODEL   = "cogito:8b"
@@ -94,7 +94,12 @@ def call_ollama(model, system_prompt, user_prompt, fmt, timeout, host):
         sys.stderr.write("Error: Could not parse Ollama response as JSON.\n")
         sys.exit(1)
 
-    return data.get("response", "")
+    response_text = data.get("response", "")
+    # Strip <think>...</think> blocks produced by reasoning models (e.g. Qwen3)
+    # To enable explicit thinking mode via the Ollama API, add "options": {"think": True}
+    # to the payload above and pass it through a --think flag.
+    response_text = re.sub(r"<think>.*?</think>", "", response_text, flags=re.DOTALL).strip()
+    return response_text
 
 
 def main():

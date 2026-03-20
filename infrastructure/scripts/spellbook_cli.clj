@@ -151,11 +151,15 @@
   (flush)
   (let [choice (str/trim (or (read-line) ""))]
     (case (if (str/blank? choice) "1" choice)
-      "2" (do (require '[create-conf])
+      "2" (do (try (require '[create-conf])
+                   (catch Exception _
+                     (load-file (str (fs/parent *file*) "/create_conf.clj"))))
               ((resolve 'create-conf/-main))
               (System/exit 0))
       "3" (System/exit 0)
-      (do (require '[install-spellbook])
+      (do (try (require '[install-spellbook])
+               (catch Exception _
+                 (load-file (str (fs/parent *file*) "/install_spellbook.clj"))))
           ((resolve 'install-spellbook/-main))
           (System/exit 0)))))
 
@@ -171,7 +175,9 @@
         (when-let [existing (try (find-conf) (catch Exception _ nil))]
           (println (str "[!] Note: a spellbook.conf was already found at " (str existing)))
           (println "    You can proceed to create a new installation at a different location."))
-        (require '[install-spellbook])
+        (try (require '[install-spellbook])
+             (catch Exception _
+               (load-file (str (fs/parent *file*) "/install_spellbook.clj"))))
         ((resolve 'install-spellbook/-main))
         (System/exit 0))
       ;; Normal flow: walk up dirs for a conf

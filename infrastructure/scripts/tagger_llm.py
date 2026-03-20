@@ -20,6 +20,11 @@ def get_config(section, key):
     )
     return result.stdout.strip()
 
+try:
+    MODEL = get_config("spellbook", "ollama_model")
+except subprocess.CalledProcessError:
+    pass
+
 ALLOWED_TAGS = (
     "contacts, journal, messages, email, todo, calendar, alarm, science, technology, "
     "engineering, mathematics, fine-arts, music, history, philosophy, logic, computers, "

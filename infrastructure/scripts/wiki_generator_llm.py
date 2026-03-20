@@ -172,6 +172,9 @@ if __name__ == "__main__":
     wiki_dir    = get_config("spellbook", "wiki")
     archive_dir = os.path.join(get_config("spellbook", "archive"), "wiki")
     canon_file  = os.path.join(taghub_dir, "canon-tags")
-    ollama_model = 'cogito:8b'
+    try:
+        ollama_model = get_config("spellbook", "ollama_model")
+    except subprocess.CalledProcessError:
+        ollama_model = 'cogito:8b'
 
     process_wikis(canon_file, taghub_dir, notes_dir, wiki_dir, archive_dir, ollama_model)

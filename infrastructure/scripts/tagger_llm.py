@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 # cogito:8b seems to follow the rules better then Llama3.1:8b
 # trying out granite, lets see how IBM does
 MODEL = "granite4:3b"
+HOST  = "http://localhost:11434"
 OLLAMA_CALL = os.path.join(os.path.dirname(__file__), "ollama_call.py")
 CONFIG_READER = os.path.join(os.path.dirname(__file__), "config_reader.py")
 
@@ -22,6 +23,12 @@ def get_config(section, key):
 
 try:
     MODEL = get_config("spellbook", "ollama_model")
+except subprocess.CalledProcessError:
+    pass
+
+try:
+    _host = get_config("spellbook", "ollama_host")
+    HOST = _host if _host.startswith("http") else f"http://{_host}"
 except subprocess.CalledProcessError:
     pass
 
@@ -43,7 +50,7 @@ def get_tags(content):
     # the garden process downstream is responsible for normalising and curating tags.
     try:
         result = subprocess.run(
-            ["python3", OLLAMA_CALL, "-m", MODEL,
+            ["python3", OLLAMA_CALL, "-m", MODEL, "-H", HOST,
              "-s", f"Select tags strictly from this list: [{ALLOWED_TAGS}]. Avoid 'other' unless necessary. Use tags moderately. Return ONLY the selected tags formatted with hash signs (e.g. #science #logic).",
              "-u", content],
             capture_output=True, text=True, check=True

@@ -8,6 +8,7 @@ import argparse
 from datetime import datetime
 
 MODEL = "cogito:8b"
+HOST  = "http://localhost:11434"
 OLLAMA_CALL = os.path.join(os.path.dirname(__file__), "ollama_call.py")
 CONFIG_READER = os.path.join(os.path.dirname(__file__), "config_reader.py")
 
@@ -22,6 +23,12 @@ def get_config(section, key):
 
 try:
     MODEL = get_config("spellbook", "ollama_model")
+except subprocess.CalledProcessError:
+    pass
+
+try:
+    _host = get_config("spellbook", "ollama_host")
+    HOST = _host if _host.startswith("http") else f"http://{_host}"
 except subprocess.CalledProcessError:
     pass
 
@@ -45,8 +52,13 @@ def strip_markdown_fences(text):
 
 def get_zettel_json(content):
     try:
+        # NOTE: "-f", "json" removed — thinking models (e.g. qwen3) reject the format
+        # constraint with HTTP 400. The retry loop + strip_markdown_fences below handles
+        # JSON cleanup instead. To re-enable for non-thinking models, add back:
+        #   "-f", "json",
+        # after "-H", HOST in the list below.
         result = subprocess.run(
-            ["python3", OLLAMA_CALL, "-m", MODEL, "-f", "json",
+            ["python3", OLLAMA_CALL, "-m", MODEL, "-H", HOST,
              "-s", "Break the following text into atomic Zettelkasten notes. Return ONLY a raw JSON list of strings, where each string is the content of an individual note. Do not include titles or keys. No markdown formatting, no explanations.",
              "-u", content],
             capture_output=True, text=True, check=True

@@ -95,9 +95,11 @@ def main():
 
     value = config.get(args.section, args.key)
 
-    # Resolve relative paths for the [spellbook] section unless suppressed
-    if not args.no_resolve and args.section == "spellbook":
-        if value and not os.path.isabs(value):
+    # Resolve relative paths for the [spellbook] section unless suppressed.
+    # Only resolve known path-type keys; skip model names, hostnames, etc.
+    PATH_KEYS = {"inbox", "notes", "archive", "wiki", "templates", "log"}
+    if not args.no_resolve and args.section == "spellbook" and args.key in PATH_KEYS:
+        if value and not os.path.isabs(value) and not value.startswith(("http://", "https://")):
             value = os.path.normpath(os.path.join(config_dir, value))
 
     print(value)

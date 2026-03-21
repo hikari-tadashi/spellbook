@@ -58,7 +58,7 @@ def append_error_tag(note_filepath):
     except Exception as e:
         print(f"  Failed to append error to {note_filepath}: {e}")
 
-def call_ollama(tag, source_texts, model):
+def call_ollama(tag, source_texts, model, host):
     """Sends the aggregated texts to Ollama to generate a wiki."""
     compiled_sources = "\n\n--- NEXT SOURCE ---\n\n".join(source_texts)
 
@@ -71,7 +71,7 @@ def call_ollama(tag, source_texts, model):
     print(f"  Sending request to Ollama (Model: {model}) for tag '{tag}'...")
     try:
         result = subprocess.run(
-            ["python3", OLLAMA_CALL, "-m", model, "-t", "300",
+            ["python3", OLLAMA_CALL, "-m", model, "-H", host, "-t", "300",
              "-s", "You are an expert knowledge base curator. Write in Obsidian Markdown format.",
              "-u", prompt],
             capture_output=True, text=True, check=True
@@ -81,7 +81,7 @@ def call_ollama(tag, source_texts, model):
         print(f"  API Error for tag '{tag}': {e.stderr}")
         return None
 
-def process_wikis(canon_file, taghub_dir, notes_dir, wiki_dir, archive_dir, ollama_model):
+def process_wikis(canon_file, taghub_dir, notes_dir, wiki_dir, archive_dir, ollama_model, ollama_host):
     if not os.path.exists(canon_file):
         print(f"Error: Canon file '{canon_file}' not found.")
         return
@@ -145,7 +145,7 @@ def process_wikis(canon_file, taghub_dir, notes_dir, wiki_dir, archive_dir, olla
             print(f"  No valid source texts found for '{tag}'. Skipping wiki generation.")
             continue
             
-        generated_wiki = call_ollama(tag, source_texts, ollama_model)
+        generated_wiki = call_ollama(tag, source_texts, ollama_model, ollama_host)
         
         if generated_wiki:
             # 7. Append References Footer
@@ -177,4 +177,10 @@ if __name__ == "__main__":
     except subprocess.CalledProcessError:
         ollama_model = 'cogito:8b'
 
-    process_wikis(canon_file, taghub_dir, notes_dir, wiki_dir, archive_dir, ollama_model)
+    try:
+        _host = get_config("spellbook", "ollama_host")
+        ollama_host = _host if _host.startswith("http") else f"http://{_host}"
+    except subprocess.CalledProcessError:
+        ollama_host = "http://localhost:11434"
+
+    process_wikis(canon_file, taghub_dir, notes_dir, wiki_dir, archive_dir, ollama_model, ollama_host)

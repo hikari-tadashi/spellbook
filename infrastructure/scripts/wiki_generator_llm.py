@@ -71,10 +71,9 @@ def call_ollama(tag, source_texts, model, host):
     print(f"  Sending request to Ollama (Model: {model}) for tag '{tag}'...")
     try:
         result = subprocess.run(
-            ["python3", OLLAMA_CALL, "-m", model, "-H", host, "-t", "300",
-             "-s", "You are an expert knowledge base curator. Write in Obsidian Markdown format.",
-             "-u", prompt],
-            capture_output=True, text=True, check=True
+            ["python3", OLLAMA_CALL, "-m", model, "-H", host,
+             "-s", "You are an expert knowledge base curator. Write in Obsidian Markdown format."],
+            input=prompt, capture_output=True, text=True, check=True
         )
         return result.stdout
     except subprocess.CalledProcessError as e:

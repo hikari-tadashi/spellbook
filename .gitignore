@@ -1,6 +1,7 @@
 .claude
 .lsp
 .clj-kondo
+.obsidian
 **/__pycache__/
 spellbook.conf
 **/bb.exe

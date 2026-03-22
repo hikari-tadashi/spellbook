@@ -22,9 +22,12 @@ def get_config(section, key):
     return result.stdout.strip()
 
 try:
-    MODEL = get_config("spellbook", "ollama_model")
+    MODEL = get_config("spellbook", "tagger_model")
 except subprocess.CalledProcessError:
-    pass
+    try:
+        MODEL = get_config("spellbook", "ollama_model")
+    except subprocess.CalledProcessError:
+        pass
 
 try:
     _host = get_config("spellbook", "ollama_host")

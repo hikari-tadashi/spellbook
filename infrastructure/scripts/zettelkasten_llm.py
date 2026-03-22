@@ -22,9 +22,12 @@ def get_config(section, key):
     return result.stdout.strip()
 
 try:
-    MODEL = get_config("spellbook", "ollama_model")
+    MODEL = get_config("spellbook", "zettel_model")
 except subprocess.CalledProcessError:
-    pass
+    try:
+        MODEL = get_config("spellbook", "ollama_model")
+    except subprocess.CalledProcessError:
+        pass
 
 try:
     _host = get_config("spellbook", "ollama_host")
@@ -101,6 +104,21 @@ def main():
     except Exception as e:
         sys.stderr.write(f"File Error: {e}\n")
         sys.exit(1)
+
+    if not text_content.strip():
+        sys.stderr.write(f"Warning: File '{filepath}' is empty, skipping.\n")
+        print("[]")
+        try:
+            filename = os.path.basename(filepath)
+            archived_path = os.path.join(archive_dir, filename)
+            if os.path.exists(archived_path):
+                ts = datetime.now().strftime("%Y%m%d%H%M%S")
+                name, ext = os.path.splitext(filename)
+                archived_path = os.path.join(archive_dir, f"{name}-{ts}{ext}")
+            shutil.move(filepath, archived_path)
+        except Exception as e:
+            sys.stderr.write(f"Archive Error: {e}\n")
+        sys.exit(0)
 
     # Retry LLM call up to MAX_RETRIES times if JSON parsing fails.
     # strip_markdown_fences handles the most common formatting mistake before each attempt.

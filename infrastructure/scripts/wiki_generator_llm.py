@@ -173,9 +173,12 @@ if __name__ == "__main__":
     archive_dir = os.path.join(get_config("spellbook", "archive"), "wiki")
     canon_file  = os.path.join(taghub_dir, "canon-tags")
     try:
-        ollama_model = get_config("spellbook", "ollama_model")
+        ollama_model = get_config("spellbook", "wiki_model")
     except subprocess.CalledProcessError:
-        ollama_model = 'cogito:8b'
+        try:
+            ollama_model = get_config("spellbook", "ollama_model")
+        except subprocess.CalledProcessError:
+            ollama_model = 'cogito:8b'
 
     try:
         _host = get_config("spellbook", "ollama_host")

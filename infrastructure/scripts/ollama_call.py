@@ -28,7 +28,7 @@ import requests
 
 DEFAULT_MODEL   = "cogito:8b"
 DEFAULT_HOST    = "http://192.168.68.62:11434"
-DEFAULT_TIMEOUT = 300
+DEFAULT_TIMEOUT = 600
 
 
 def parse_args():
@@ -57,10 +57,14 @@ def parse_args():
     parser.add_argument("-H", "--host",
                         default=DEFAULT_HOST,
                         help=f"Ollama host URL (default: {DEFAULT_HOST})")
+    parser.add_argument("-T", "--think",
+                        action="store_true",
+                        default=False,
+                        help="Enable thinking mode (e.g. for Qwen3 reasoning models)")
     return parser.parse_args()
 
 
-def call_ollama(model, system_prompt, user_prompt, fmt, timeout, host):
+def call_ollama(model, system_prompt, user_prompt, fmt, timeout, host, think=False):
     url = f"{host}/api/generate"
 
     payload = {
@@ -74,6 +78,8 @@ def call_ollama(model, system_prompt, user_prompt, fmt, timeout, host):
 
     if fmt == "json":
         payload["format"] = "json"
+
+    payload["options"] = {"think": think}
 
     try:
         response = requests.post(url, json=payload, timeout=timeout)
@@ -125,6 +131,7 @@ def main():
         fmt=args.format,
         timeout=args.timeout,
         host=args.host,
+        think=args.think,
     )
 
     print(result)

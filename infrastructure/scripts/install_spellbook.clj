@@ -338,6 +338,7 @@
                   (str "rituals       = " (p install-dir "infrastructure" "rituals"))
                   (str "ollama_host   = " ollama-host)
                   (str "ollama_model  = " ollama-model)
+                  "plugin_sigil  ="
                   ""
                   "; Rituals registered explicitly by name=path."
                   "; These override any same-named .ritual file in the rituals/ directory."

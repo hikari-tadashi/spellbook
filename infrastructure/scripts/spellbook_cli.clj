@@ -62,15 +62,92 @@
        (map str/trim)
        (remove #(or (str/blank? %) (str/starts-with? % "#") (str/starts-with? % ";")))))
 
+(defn read-plugin-conf
+  "Parses a plugin.conf file. Returns a map of {section {key value}},
+   or nil if the file cannot be parsed or has no [plugin] section."
+  [plugin-dir]
+  (let [conf-path (fs/path plugin-dir "plugin.conf")]
+    (when (fs/exists? conf-path)
+      (let [parsed (parse-conf conf-path)]
+        (when (get parsed "plugin")
+          parsed)))))
+
+(defn discover-plugins
+  "Scans infrastructure/plugins/ for subdirectories containing plugin.conf.
+   Returns {:rituals {name path} :components {plugin.component invocation}}.
+
+   Collision handling:
+   - Two plugins with the same [plugin] name key: warn to stderr listing both
+     directory paths; the first discovered alphabetically wins.
+   - Two plugins registering the same plugin.component key: warn to stderr
+     listing both; the first discovered alphabetically wins.
+   Alphabetical ordering is enforced explicitly to ensure determinism."
+  [conf-path]
+  (let [conf-dir      (fs/parent conf-path)
+        plugins-dir   (fs/path conf-dir "infrastructure" "plugins")]
+    (if-not (fs/exists? plugins-dir)
+      {:rituals {} :components {}}
+      (let [plugin-dirs (->> (fs/list-dir plugins-dir)
+                             (filter fs/directory?)
+                             (sort-by str))]
+        (reduce
+          (fn [acc plugin-dir]
+            (let [plugin-conf (read-plugin-conf plugin-dir)]
+              (if-not plugin-conf
+                acc
+                (let [plugin-name   (get-in plugin-conf ["plugin" "name"])
+                      rituals-rel   (get-in plugin-conf ["plugin" "rituals"])
+                      rituals-dir   (if (not (str/blank? rituals-rel))
+                                      (fs/path plugin-dir rituals-rel)
+                                      plugin-dir)
+                      new-rituals   (if (fs/exists? rituals-dir)
+                                      (into {}
+                                        (for [f    (fs/list-dir rituals-dir)
+                                              :let  [fname (str (fs/file-name f))]
+                                              :when (str/ends-with? fname ".ritual")]
+                                          [(str/replace fname #"\.ritual$" "") f]))
+                                      {})
+                      components    (get plugin-conf "components" {})
+                      new-components (into {}
+                                      (for [[cname invocation] components
+                                            :when (and cname invocation)]
+                                        (let [key      (str plugin-name "." cname)
+                                              resolved (str/replace
+                                                         invocation
+                                                         #"(\S+\.(?:py|sh|clj|rb|js|ts))"
+                                                         (fn [[_ p]]
+                                                           (str (fs/relativize
+                                                                  conf-dir
+                                                                  (fs/path plugin-dir p)))))]
+                                          [key resolved])))]
+                  (doseq [[rname _] new-rituals]
+                    (when (contains? (:rituals acc) rname)
+                      (binding [*out* *err*]
+                        (println (str "Warning: ritual name collision '" rname
+                                      "' between plugins. "
+                                      "First discovered (alphabetically) wins. "
+                                      "Override via [rituals] in spellbook.conf.")))))
+                  (doseq [[ckey _] new-components]
+                    (when (contains? (:components acc) ckey)
+                      (binding [*out* *err*]
+                        (println (str "Warning: component key collision '" ckey
+                                      "' between plugins. "
+                                      "First discovered (alphabetically) wins.")))))
+                  {:rituals    (merge new-rituals    (:rituals    acc))
+                   :components (merge new-components (:components acc))}))))
+          {:rituals {} :components {}}
+          plugin-dirs)))))
+
 (defn discover-rituals
   "Returns a map of {ritual-name ritual-path}.
    Sources (in increasing priority):
-     1. .ritual files in the directory set by rituals= under [spellbook]
-     2. explicit name=path entries under [rituals] in the conf"
-  [conf-path conf]
+     1. plugin rituals (lowest priority)
+     2. .ritual files in the directory set by rituals= under [spellbook]
+     3. explicit name=path entries under [rituals] in the conf"
+  [conf-path conf plugin-rituals]
   (let [conf-dir    (fs/parent conf-path)
 
-        ;; Source 1: rituals= directory under [spellbook]
+        ;; Source 2: rituals= directory under [spellbook]
         rituals-dir (get-in conf ["spellbook" "rituals"])
         from-dir    (if rituals-dir
                       (let [dir (fs/path conf-dir rituals-dir)]
@@ -83,14 +160,47 @@
                           (do (println (str "Warning: rituals dir not found: " dir)) {})))
                       {})
 
-        ;; Source 2: explicit [rituals] section in conf
+        ;; Source 3: explicit [rituals] section in conf
         from-conf   (into {}
                       (for [[name rel-path] (get conf "rituals" {})
                             :when rel-path]
                         [name (fs/path conf-dir rel-path)]))]
 
-    ;; conf entries override dir-based ones on name collision
-    (merge from-dir from-conf)))
+    ;; plugin-rituals < from-dir < from-conf
+    (merge plugin-rituals from-dir from-conf)))
+
+(defn expand-components
+  "Expands plugin.component tokens in a ritual line using the component registry.
+
+   Sigil behaviour:
+   - If plugin-sigil is nil or blank: every whitespace-delimited token that
+     matches a registry key is expanded.
+   - If plugin-sigil is set: only tokens beginning with that character are
+     candidates; the sigil is stripped before the registry lookup.
+
+   Path guard: if a token (after sigil stripping) resolves to an existing
+   file path from the working directory, it is NOT expanded."
+  [line component-registry plugin-sigil]
+  (if (empty? component-registry)
+    line
+    (let [use-sigil? (not (str/blank? plugin-sigil))
+          sigil-char (when use-sigil? (str (first plugin-sigil)))]
+      (str/join " "
+        (map (fn [token]
+               (let [candidate? (if use-sigil?
+                                  (str/starts-with? token sigil-char)
+                                  (and (str/includes? token ".")
+                                       (not (str/includes? token "/"))
+                                       (not (str/includes? token "\\"))))
+                     bare       (if (and use-sigil? candidate?)
+                                  (subs token (count sigil-char))
+                                  token)]
+                 (if (and candidate?
+                          (contains? component-registry bare)
+                          (not (fs/exists? bare)))
+                   (get component-registry bare)
+                   token)))
+             (str/split line #"\s+"))))))
 
 ;; ---------------------------------------------------------------------------
 ;; Ritual Execution
@@ -105,7 +215,7 @@
 (defn run-ritual!
   "Runs a named ritual from a ritual path. Returns exit code (0 = success).
    extra-args, if provided, are appended to each command in the ritual."
-  [name ritual-path working-dir & [extra-args]]
+  [name ritual-path working-dir component-registry plugin-sigil & [extra-args]]
   (let [commands  (vec (load-ritual ritual-path))
         args-str  (when (seq extra-args) (str " " (str/join " " extra-args)))]
     (if (empty? commands)
@@ -115,7 +225,8 @@
         (loop [[cmd & rest-cmds] commands step 0]
           (if-not cmd
             (do (println "✓ Done.") 0)
-            (let [full-cmd (str cmd args-str)
+            (let [expanded (expand-components cmd component-registry plugin-sigil)
+                  full-cmd (str expanded args-str)
                   exit     (:exit @(apply process {:dir (str working-dir) :out :inherit :err :inherit} (conj shell-args full-cmd)))]
               (if (= 0 exit)
                 (recur rest-cmds (inc step))
@@ -184,16 +295,19 @@
       (let [conf-path (try (find-conf) (catch Exception _ nil))]
         (if (nil? conf-path)
           (first-run-menu!)
-          (let [conf        (parse-conf conf-path)
-                working-dir (fs/parent conf-path)
-                rituals     (discover-rituals conf-path conf)]
+          (let [conf         (parse-conf conf-path)
+                working-dir  (fs/parent conf-path)
+                plugins      (discover-plugins conf-path)
+                plugin-sigil (get-in conf ["spellbook" "plugin_sigil"] "")
+                rituals      (discover-rituals conf-path conf (:rituals plugins))
+                components   (:components plugins)]
             (cond
               (or (nil? cmd) (= cmd "list"))
               (list-rituals! rituals)
 
               :else
               (if-let [ritual-path (get rituals cmd)]
-                (System/exit (run-ritual! cmd ritual-path working-dir extra-args))
+                (System/exit (run-ritual! cmd ritual-path working-dir components plugin-sigil extra-args))
                 (do
                   (println (str "Unknown ritual: '" cmd "'"))
                   (list-rituals! rituals)

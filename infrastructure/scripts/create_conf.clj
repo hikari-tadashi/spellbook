@@ -79,6 +79,7 @@
      (str "rituals       = " (p root "infrastructure" "rituals"))
      "ollama_host   = 127.0.0.1:11434"
      "ollama_model  = llama3.1:8b"
+     "plugin_sigil  ="
      ""
      "; Rituals registered explicitly by name=path."
      "; These override any same-named .ritual file in the rituals/ directory."

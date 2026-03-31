@@ -10,3 +10,4 @@ inbox
 content
 projects
 infrastructure/plugins/*
+infrastructure/debug/

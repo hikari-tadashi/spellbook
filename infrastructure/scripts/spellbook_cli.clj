@@ -225,11 +225,32 @@
       (str before args-str after))
     (str cmd args-str)))
 
+(defn inject-tee-stages
+  "Transforms a pipe-chain command to capture each stage's output via tee.
+   Returns [modified-cmd debug-dir timestamp].
+
+   A | B | C  →  A | tee debug/TS_ritual_0_A.txt | B | tee debug/TS_ritual_1_B.txt | C | tee debug/TS_ritual_2_C.txt"
+  [cmd ritual-name working-dir]
+  (let [ts        (.format (java.time.LocalDateTime/now)
+                           (java.time.format.DateTimeFormatter/ofPattern "yyyyMMdd_HHmmss"))
+        run-dir   (str working-dir "/infrastructure/debug/" ts "_" ritual-name)
+        stages    (str/split cmd #"\s*\|\s*")
+        teed      (map-indexed
+                    (fn [i stage]
+                      (let [script-name (or (second (re-find #"(\w+)\.(?:py|sh|clj|rb|js|ts)" stage))
+                                            (str "stage" i))
+                            fname       (str run-dir "/" i "_" script-name ".txt")]
+                        (str stage " | tee " fname)))
+                    stages)]
+    [(str/join " | " teed) run-dir ts]))
+
 (defn run-ritual!
   "Runs a named ritual from a ritual path. Returns exit code (0 = success).
-   extra-args, if provided, are appended to each command in the ritual."
-  [name ritual-path working-dir component-registry plugin-sigil & [extra-args]]
-  (let [commands  (vec (load-ritual ritual-path))
+   extra-args, if provided, are appended to the first stage of each command in the ritual.
+   Pass :debug? true to tee each pipeline stage's output to infrastructure/debug/<timestamp>_<ritual>/<N>_<script>.txt"
+  [name ritual-path working-dir component-registry plugin-sigil & [extra-args opts]]
+  (let [debug?    (:debug? opts false)
+        commands  (vec (load-ritual ritual-path))
         args-str  (when (seq extra-args) (str " " (str/join " " extra-args)))]
     (if (empty? commands)
       (do (println (str "ritual '" name "' has no commands.")) 1)
@@ -238,11 +259,16 @@
         (loop [[cmd & rest-cmds] commands step 0]
           (if-not cmd
             (do (println "✓ Done.") 0)
-            (let [expanded (expand-components cmd component-registry plugin-sigil)
-                  full-cmd (if args-str
-                         (insert-args-first-stage expanded args-str)
-                         expanded)
-                  exit     (:exit @(apply process {:dir (str working-dir) :out :inherit :err :inherit} (conj shell-args full-cmd)))]
+            (let [expanded  (expand-components cmd component-registry plugin-sigil)
+                  with-args (if args-str (insert-args-first-stage expanded args-str) expanded)
+                  [full-cmd debug-dir debug-ts]
+                            (if (and debug? (str/includes? with-args "|"))
+                              (inject-tee-stages with-args name working-dir)
+                              [with-args nil nil])
+                  _         (when debug-dir (fs/create-dirs debug-dir))
+                  exit      (:exit @(apply process {:dir (str working-dir) :out :inherit :err :inherit} (conj shell-args full-cmd)))]
+              (when (and debug-dir (= 0 exit))
+                (println (str "  debug → " debug-dir "/" debug-ts "_" name "_*.txt")))
               (if (= 0 exit)
                 (recur rest-cmds (inc step))
                 (do
@@ -322,7 +348,10 @@
 
               :else
               (if-let [ritual-path (get rituals cmd)]
-                (System/exit (run-ritual! cmd ritual-path working-dir components plugin-sigil extra-args))
+                (let [debug?      (some #(= % "--debug") extra-args)
+                      clean-args  (remove #(= % "--debug") extra-args)]
+                  (System/exit (run-ritual! cmd ritual-path working-dir components plugin-sigil
+                                            (seq clean-args) {:debug? debug?})))
                 (do
                   (println (str "Unknown ritual: '" cmd "'"))
                   (list-rituals! rituals)

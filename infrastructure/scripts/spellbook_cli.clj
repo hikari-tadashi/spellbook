@@ -212,6 +212,19 @@
     ["cmd" "/c"]
     ["sh" "-c"]))
 
+(defn insert-args-first-stage
+  "Appends args-str to the first pipeline stage only (before the first pipe |).
+   For non-pipeline commands, appends at the end — preserving existing behaviour.
+   Trailing CLI args represent input data and belong at the pipeline boundary,
+   not at the final stage."
+  [cmd args-str]
+  (if (str/includes? cmd "|")
+    (let [pipe-idx (str/index-of cmd "|")
+          before   (str/trimr (subs cmd 0 pipe-idx))
+          after    (subs cmd pipe-idx)]
+      (str before args-str after))
+    (str cmd args-str)))
+
 (defn run-ritual!
   "Runs a named ritual from a ritual path. Returns exit code (0 = success).
    extra-args, if provided, are appended to each command in the ritual."
@@ -226,7 +239,9 @@
           (if-not cmd
             (do (println "✓ Done.") 0)
             (let [expanded (expand-components cmd component-registry plugin-sigil)
-                  full-cmd (str expanded args-str)
+                  full-cmd (if args-str
+                         (insert-args-first-stage expanded args-str)
+                         expanded)
                   exit     (:exit @(apply process {:dir (str working-dir) :out :inherit :err :inherit} (conj shell-args full-cmd)))]
               (if (= 0 exit)
                 (recur rest-cmds (inc step))

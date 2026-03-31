@@ -1,0 +1,14 @@
+# query-cited.ritual
+# Answers a natural language question with citations to source notes and wikis.
+#
+# Usage:
+#   spellbook query-cited                              (interactive prompt)
+#   spellbook query-cited what do I know about logic   (trailing args)
+#   spellbook query-cited --no-wikis what did I write about Mersault
+#   echo "what is stoicism?" | spellbook query-cited   (stdin pipe)
+#
+# Output: prose answer followed by a References section listing zettel IDs
+# and wiki pages used. The --mode prose flag on query_llm.py below can be
+# changed to --mode json for machine-readable output suitable for piping
+# into other scripts.
+python3 infrastructure/scripts/query_args_handler.py | python3 infrastructure/scripts/query_tagger.py | python3 infrastructure/scripts/wiki_retriever.py | python3 infrastructure/scripts/zettel_aggregator.py | python3 infrastructure/scripts/query_ranker.py | python3 infrastructure/scripts/context_assembler.py | python3 infrastructure/scripts/query_llm.py --mode cited

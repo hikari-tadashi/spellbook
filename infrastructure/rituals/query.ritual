@@ -1,10 +1,12 @@
 # query.ritual
-# Queries the note graph using natural language via the LLM.
-# Reads a prompt from stdin, searches content/notes/, returns ranked results.
+# Answers a natural language question using your Spellbook knowledge base.
 #
-# Pipeline: prompt on stdin  →  retriever  →  LLM ranker  →  formatted output
+# Usage:
+#   spellbook query                                    (interactive prompt)
+#   spellbook query what do I know about logic         (trailing args)
+#   spellbook query --no-wikis what did I write about Mersault
+#   echo "what is stoicism?" | spellbook query         (stdin pipe)
 #
-# TODO: not yet implemented. Planned pipeline:
-#   python3 infrastructure/scripts/query_retriever.py
-#   python3 infrastructure/scripts/query_llm.py
-python3 -c "print('\nquery: this ritual is not yet built out.\nPlanned: tag hubs, wikis, zettels, and source files will be used as context for natural-language queries against the note graph.\n')"
+# Output: prose answer written for a human reader.
+# For cited output, run: spellbook query-cited
+python3 infrastructure/scripts/query_args_handler.py | python3 infrastructure/scripts/query_tagger.py | python3 infrastructure/scripts/wiki_retriever.py | python3 infrastructure/scripts/zettel_aggregator.py | python3 infrastructure/scripts/query_ranker.py | python3 infrastructure/scripts/context_assembler.py | python3 infrastructure/scripts/query_llm.py --mode prose

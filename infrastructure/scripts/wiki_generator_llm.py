@@ -68,7 +68,7 @@ def call_ollama(tag, source_texts, model, host):
         f"Do not invent information outside of these sources.\n\nSOURCE TEXTS:\n{compiled_sources}"
     )
 
-    print(f"  Sending request to Ollama (Model: {model}) for tag '{tag}'...")
+    print(f"  Sending request to oracle (Model: {model}) for tag '{tag}'...")
     try:
         result = subprocess.run(
             ["python3", ORACLE_CALL, "-m", model, "-H", host,
@@ -175,12 +175,12 @@ if __name__ == "__main__":
         ollama_model = get_config("spellbook", "wiki_model")
     except subprocess.CalledProcessError:
         try:
-            ollama_model = get_config("spellbook", "ollama_model")
+            ollama_model = get_config("spellbook", "oracle_model")
         except subprocess.CalledProcessError:
             ollama_model = 'cogito:8b'
 
     try:
-        _host = get_config("spellbook", "ollama_host")
+        _host = get_config("spellbook", "oracle_host")
         ollama_host = _host if _host.startswith("http") else f"http://{_host}"
     except subprocess.CalledProcessError:
         ollama_host = "http://localhost:11434"

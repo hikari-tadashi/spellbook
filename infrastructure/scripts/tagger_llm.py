@@ -25,12 +25,12 @@ try:
     MODEL = get_config("spellbook", "tagger_model")
 except subprocess.CalledProcessError:
     try:
-        MODEL = get_config("spellbook", "ollama_model")
+        MODEL = get_config("spellbook", "oracle_model")
     except subprocess.CalledProcessError:
         pass
 
 try:
-    _host = get_config("spellbook", "ollama_host")
+    _host = get_config("spellbook", "oracle_host")
     HOST = _host if _host.startswith("http") else f"http://{_host}"
 except subprocess.CalledProcessError:
     pass

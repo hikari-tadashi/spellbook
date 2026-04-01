@@ -22,6 +22,7 @@ Exit codes:
 """
 
 import sys
+import re
 import argparse
 import requests
 
@@ -101,10 +102,14 @@ def call_lmstudio(model, system_prompt, user_prompt, fmt, timeout, host):
         sys.exit(1)
 
     try:
-        return data["choices"][0]["message"]["content"]
+        content = data["choices"][0]["message"]["content"]
     except (KeyError, IndexError):
         sys.stderr.write("Error: Unexpected response structure from LM Studio.\n")
         sys.exit(1)
+
+    # Strip <think>...</think> blocks produced by reasoning models (e.g. Qwen3)
+    content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
+    return content
 
 
 def main():

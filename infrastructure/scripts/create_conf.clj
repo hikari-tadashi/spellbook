@@ -87,11 +87,8 @@
      (str "scripts       = " (p root "infrastructure" "scripts"))
      (str "documentation = " (p root "infrastructure" "documentation"))
      (str "rituals       = " (p root "infrastructure" "rituals"))
-     (str "ollama_host   = " ollama-host)
-     (str "ollama_model  = " ollama-model)
-     "query_model        = cogito:8b"
-     "query_tagger_model = granite4:3b"
-     "query_llm_model    = cogito:8b"
+     (str "oracle_host   = " ollama-host)
+     (str "oracle_model  = " ollama-model)
      "query_max_results  = 10"
      "plugin_sigil  ="
      ""

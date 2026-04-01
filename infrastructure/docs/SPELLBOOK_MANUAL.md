@@ -8,12 +8,13 @@ Ah. You've opened the manual. Good. That already puts you ahead of most apprenti
 
 This manual will teach you how the Spellbook works, what all its peculiar pieces do, and — when you're ready — how to extend it with your own rituals. Nothing here will be forced on you. Each section offers understanding first, and action only when you want it. If you are new to software and feel uncertain: good. Uncertainty means you're paying attention. I'll explain everything, and I'll never assume you know something I haven't taught you yet. Now. Let us begin.
 
-This document is divided into five parts:
+This document is divided into six parts:
 * **Part I** explains what the Spellbook is and why it works the way it does.
 * **Part II** covers the physical structure — the files and folders.
 * **Part III** walks through the ritual cycle, which is the heart of the system.
 * **Part IV** teaches you how to write your own rituals.
 * **Part V** covers your Obsidian vault — the interface where your knowledge lives.
+* **Part VI** introduces the plugin system — how to extend the Spellbook with your own components.
 
 A reference section and glossary follow at the end. You do not need to read this linearly. It is a reference as much as it is a guide. But if you are new, Parts I and II are worth reading in order.
 
@@ -25,7 +26,7 @@ A spellbook, in folklore, is not merely a book of spells. It is a personal recor
 
 The Spellbook is a personal knowledge management system. That is a formal way of saying it is a place where you put things you want to remember, and software that helps you organise, connect, and retrieve them. You drop a document, a note, or a piece of writing into your inbox. The Spellbook reads it, breaks it into focused ideas, tags those ideas, and files them. Over time, it builds an interconnected web of knowledge — a graph of everything you've fed it, linked by topic.
 
-The system is designed to run locally, on your own computer. Your notes never leave your machine unless you choose to put them somewhere. The artificial intelligence it uses — which handles the reading, organising, and writing — runs locally too, through a piece of software called Ollama.
+The system is designed to run locally, on your own computer. Your notes never leave your machine unless you choose to put them somewhere. The artificial intelligence it uses — which handles the reading, organising, and writing — runs locally, through either Ollama or LM Studio, both of which keep your text entirely on your own hardware. Which backend is active at any given moment is a single line in your configuration file.
 
 The Spellbook is used through **Obsidian**, a free note-taking application that reads a folder of text files and displays them as an interconnected knowledge base. Obsidian is the lens through which you read and navigate your Spellbook. The Spellbook's scripts produce the files; Obsidian displays them.
 
@@ -45,8 +46,8 @@ The table below shows the Spellbook's terms alongside their plain-language meani
 | Zettel | An atomic idea | A single, self-contained note — one idea per note |
 | Tag Hub | A topic index | A generated file listing every note connected to a given tag |
 | Wiki | A topic summary | An AI-generated overview of a topic, drawn from all your notes on it |
-| Oracle | Your AI assistant | Ollama — the local AI that reads and writes on your behalf |
-| Model | The oracle's knowledge | The specific AI language model loaded into Ollama |
+| Oracle | Your AI assistant | The local AI that reads and writes on your behalf — routed through `oracle_call.py` to either Ollama or LM Studio |
+| Model | The oracle's knowledge | The specific AI language model loaded into your chosen backend |
 | Configuration Tome | Your settings file | `spellbook.conf` — an INI file that tells the system where everything lives |
 | Install Wizard | The setup guide | The installation script — and, by extension, this narrator |
 | Canon Tags | Your approved vocabulary | A list of tags the system recognises as valid for categorisation |
@@ -59,7 +60,7 @@ Before we descend into the details, let me show you the whole shape of the thing
 The Spellbook's architecture has three layers, each built on top of the previous one.
 * **The first layer is the file system.** Your notes, your scripts, your rituals, your configuration — everything is a plain text file in a regular folder. There is no database. There is no cloud service. If you can read a text file, you can see exactly what the Spellbook is doing.
 * **The second layer is the runtime.** This is the Babashka interpreter — a small, portable program that can read and execute Clojure code on any operating system. Babashka is why the Spellbook works the same way on Windows, Mac, and Linux without modification. Clojure is a dialect of Lisp, a family of programming languages known for their elegance. You do not need to know Clojure to use the Spellbook. You only need to know that Babashka is the engine that turns rituals into action.
-* **The third layer is the oracle.** This is Ollama, the local AI. The Spellbook calls on Ollama to perform three tasks: breaking documents into atomic notes, assigning tags to those notes, and generating wiki pages from groups of notes. Ollama runs on your machine. It does not send your text to the internet.
+* **The third layer is the oracle.** This is the local AI. The Spellbook calls on the oracle to perform three tasks: breaking documents into atomic notes, assigning tags to those notes, and generating wiki pages from groups of notes. The oracle layer is an abstraction: a dispatcher script called `oracle_call.py` reads your chosen backend from `spellbook.conf` and routes every AI request to either **Ollama** or **LM Studio** accordingly. Both run on your machine. Neither sends your text to the internet. Switching backends is a one-line change in your config.
 
 The flow of information through the system looks like this:
 
@@ -78,13 +79,17 @@ The flow of information through the system looks like this:
 ▼ (focus ritual)
 [ content/maps/tag-hub/ ] ← Tag index built
 │
-▼ (sleep ritual)
+▼ (sleep / wiki ritual)
 [ content/maps/wiki/ ] ← Wiki pages written
 │
 ▼
 [ Obsidian vault ] ← You browse and read here
+         │
+         ▼ (query / query-cited ritual)
+[ Oracle answers your questions ]  ← Ask anything
 ```
-*(Diagram derived from)*
+
+*(The oracle layer — `oracle_call.py` — sits between every ritual and the AI backend. Set `oracle_backend = ollama` or `oracle_backend = lmstudio` in your conf to choose which engine powers the oracle at any time.)*
 
 ---
 
@@ -110,7 +115,8 @@ spellbook/ ← Your grimoire root
 ├── infrastructure/
 │ ├── scripts/ ← The programs that run the system
 │ ├── rituals/ ← The ritual files you invoke
-│ └── documentation/ ← This manual lives here
+│ ├── plugins/ ← Optional extensions to the system
+│ └── docs/ ← This manual and other documentation
 ├── projects/ ← Project-specific notes (optional)
 └── spellbook.conf ← Your configuration tome
 ```
@@ -130,7 +136,7 @@ The file `spellbook.conf` lives at the root of your installation. It is a plain 
 Here is what a typical `spellbook.conf` looks like, with explanations of each section:
 
 ```ini
-; ── [spellbook] — core paths ──────────────────────────────
+; ── [spellbook] — core paths and oracle settings ──────────────────────────────
 [spellbook]
 root = /home/yourname/Documents/spellbook
 inbox = /home/yourname/Documents/spellbook/inbox
@@ -141,14 +147,26 @@ taghub = /home/yourname/Documents/spellbook/content/maps/tag-hub
 wiki = /home/yourname/Documents/spellbook/content/maps/wiki
 rituals = infrastructure/rituals
 scripts = infrastructure/scripts
-ollama_host = 127.0.0.1:11434
-ollama_model = granite4:3b
+
+; ── Oracle settings ──────────────────────────────────────────
+oracle_backend = ollama          ; ollama (default) or lmstudio
+oracle_host = 127.0.0.1:11434   ; used by the ollama backend
+oracle_model = granite4:3b       ; default model for all stages
+
+; Optional per-stage model overrides (fall back to oracle_model if absent):
+; tagger_model      = granite4:3b   ; used by tagger_llm.py
+; zettel_model      = cogito:8b     ; used by zettelkasten_llm.py
+; query_tagger_model = granite4:3b  ; used by query_tagger_llm.py
+; query_llm_model   = cogito:8b     ; used by query_llm.py
+; query_model       = cogito:8b     ; fallback for all query-stage scripts
+; query_max_results = 20            ; max zettels returned by query pipeline
 
 ; ── [rituals] — named ritual shortcuts ──────────────────────
 [rituals]
 sleep = infrastructure/rituals/sleep.ritual
 reset = infrastructure/rituals/reset.ritual
 query = infrastructure/rituals/query.ritual
+query-cited = infrastructure/rituals/query-cited.ritual
 wiki = infrastructure/rituals/wiki.ritual
 
 ; ── [tags] — your canonical tag vocabulary ──────────────────
@@ -171,7 +189,7 @@ tasks = todo
 ```
 *(Configuration block from)*
 
-* **The [spellbook] Section:** This section defines where all of your important folders live. These paths are read by every script in the system. If you ever move your installation, updating these paths is all you need to do. The `ollama_host` and `ollama_model` settings tell the system how to reach Ollama and which AI model to use. If Ollama is running on your local machine, the host will be `127.0.0.1:11434`. If it runs on another machine on your network, replace this with that machine's IP address and port.
+* **The [spellbook] Section:** This section defines where all of your important folders live. These paths are read by every script in the system. If you ever move your installation, updating these paths is all you need to do. The `oracle_backend` key selects which AI engine powers the oracle: `ollama` (the default) or `lmstudio`. The `oracle_host` and `oracle_model` settings provide connection details and the default model name. If you want different stages of the pipeline to use different models — a small, fast model for tagging and a larger model for final synthesis — you can configure per-stage overrides with keys like `tagger_model`, `zettel_model`, and `query_llm_model`. Each stage falls back to `oracle_model` if its specific key is absent.
 * **The [rituals] Section:** This section registers rituals by name. When you run `spellbook sleep`, the system looks here for an entry named `sleep` and finds the path to its `.ritual` file. Registering a ritual here gives it a short, memorable name. Rituals can also be discovered automatically from the rituals/ directory without being listed here — more on that in Part IV.
 * **The [tags] Section:** This section defines your approved vocabulary for tagging notes. The Oracle uses this list when deciding how to categorise your notes. You can add any tags you like — one per line. The system will not assign tags that aren't on this list, so this is how you keep your knowledge graph consistent.
 * **The [alias] Section:** This section lets you define synonyms. If you write a note with the tag #people and you have an alias that maps people to contacts, the system will treat both as the same tag. This is useful when you want to support multiple spellings or concepts for the same category.
@@ -217,9 +235,9 @@ This is where the magic begins. You have a document — a journal entry, a web a
 
 **What absorb does, step by step:**
 1. **Step 1:** `inbox_picker.py` selects a random file from your `inbox/`. This script reads `spellbook.conf` to find the inbox path, then picks one file at random. Only .md (Markdown) and .txt files are selected.
-2. **Step 2:** `zettelkasten_llm.py` receives the file path and reads its contents. It sends the full text to Ollama with instructions to break it into atomic notes — one idea per note. The Oracle returns a list of self-contained statements. The original file is then moved to your `archive/` folder.
+2. **Step 2:** `zettelkasten_llm.py` receives the file path and reads its contents. It sends the full text to the oracle — via `oracle_call.py`, which routes the request to your configured backend — with instructions to break it into atomic notes: one idea per note. The Oracle returns a list of self-contained statements. The original file is then moved to your `archive/` folder.
 3. **Step 3:** `zettel_id_generator.py` assigns each atomic note a unique identifier based on the current timestamp (formatted as YYYYMMDDHHMMSS). This is the Zettelkasten naming convention — each note's name is the moment it was created.
-4. **Step 4:** `tagger_llm.py` sends each note to Ollama again, this time asking it to select appropriate tags from your canonical tag list. The tags are appended to the note, and the note is saved to `content/notes/`.
+4. **Step 4:** `tagger_llm.py` sends each note to the oracle again, this time asking it to select appropriate tags from your canonical tag list. The tags are appended to the note, and the note is saved to `content/notes/`.
 
 ```bash
 # absorb.ritual — the full pipeline
@@ -261,9 +279,25 @@ The sleep ritual is the most computationally intensive of the three. It calls th
 
 ### Other Rituals
 Beyond the primary cycle, the Spellbook includes several supporting rituals for specific purposes.
+
+* **consume:** The consume ritual is the absorb ritual run in a loop. It processes your inbox one file at a time, repeatedly, until every file has been absorbed and the inbox is empty. Useful after a long period of accumulation, when you want to process everything in one sitting without supervising each run.
+
+* **wiki:** The wiki ritual runs `wiki_generator_llm.py` directly, allowing you to regenerate your wiki pages without going through the full sleep sequence. Run it when you want fresh summaries but have not added new notes.
+
+* **query:** The query ritual accepts a natural-language question and searches your knowledge graph for relevant notes, using the Oracle to synthesise a readable prose answer. You can ask interactively (just run `query` with no arguments and it will prompt you), pass your question as trailing words on the command line, or pipe text in from another program. The `--no-wikis` flag excludes wiki pages from the search context; `--no-zettels` excludes individual notes.
+
+  ```bash
+  bb infrastructure/scripts/spellbook_cli.clj query what do I know about the Zettelkasten method
+  bb infrastructure/scripts/spellbook_cli.clj query --no-wikis what did I write about Mersault
+  echo "what is stoicism?" | bb infrastructure/scripts/spellbook_cli.clj query
+  ```
+
+  Behind the scenes, the query ritual is a seven-stage pipeline: `query_args_handler.py` parses your question and flags → `query_tagger_llm.py` asks the oracle to identify relevant tags → `wiki_retriever.py` loads matching wiki pages → `zettel_aggregator.py` gathers all notes associated with those tags → `query_ranker.py` scores and ranks them by relevance → `context_assembler.py` bundles the best material into a context block → `query_llm.py` sends it to the oracle and prints the answer.
+
+* **query-cited:** Identical to query, but the answer includes a References section listing the specific Zettel notes and wiki pages that were used to construct it. Use this when you want to trace an answer back to its sources.
+
 * **reset:** The reset ritual is, as its name suggests, a reset. It moves everything in your `archive/` back to your `inbox/` and wipes your processed notes and maps. This is useful when you want to reprocess your entire collection — perhaps after updating your tag list, or after upgrading the scripts. It is marked as destructive in the code comments for good reason: it deletes your processed notes. Your original documents are safely returned to the inbox, but make sure you understand what reset does before you invoke it.
-* **wiki:** The wiki ritual is an alias for the sleep ritual's wiki generation step. It runs `wiki_generator_llm.py` directly, allowing you to regenerate your wiki without running the full sleep sequence. This is useful when you want fresh wiki pages but have not added new notes.
-* **query:** The query ritual is planned but not yet implemented. When complete, it will accept a natural-language question and search your knowledge graph for relevant notes, using the Oracle to rank and present the results. The ritual file currently prints a message acknowledging this.
+
 * **install:** The install ritual re-runs the Install Wizard. This is useful if you want to set up Spellbook in a new location, or if you are helping someone else install it.
 
 ---
@@ -328,7 +362,7 @@ report = infrastructure/rituals/count.ritual
 Now both `count` (from the filename) and `report` (from the config entry) invoke the same ritual. Entries in `[rituals]` take priority over file-based discovery when names conflict, which is useful if you want to override a default ritual with a customised version.
 
 ### Using the Utility Scripts
-The Spellbook's scripts are designed to be reused. Two of them in particular — `config_reader.py` and `ollama_call.py` — are utility scripts that your own rituals can call upon just as the built-in scripts do. They are the system's vocabulary; you are free to speak it.
+The Spellbook's scripts are designed to be reused. Three of them in particular — `config_reader.py`, `oracle_call.py`, and `ollama_call.py` — are utility scripts that your own rituals can call upon just as the built-in scripts do. They are the system's vocabulary; you are free to speak it.
 
 **`config_reader.py` — reading your configuration**
 This script reads a value from your `spellbook.conf` and prints it. It accepts a section name and a key name, and prints the corresponding value. Every built-in script uses it to find paths without hardcoding them.
@@ -340,8 +374,8 @@ python3 infrastructure/scripts/config_reader.py -s spellbook -k notes
 # Get the path to your inbox
 python3 infrastructure/scripts/config_reader.py -s spellbook -k inbox
 
-# Get your configured Ollama model name
-python3 infrastructure/scripts/config_reader.py -s spellbook -k ollama_model
+# Get your configured oracle model name
+python3 infrastructure/scripts/config_reader.py -s spellbook -k oracle_model
 ```
 *(Commands from)*
 
@@ -359,30 +393,36 @@ print(notes)
 ```
 *(Code from)*
 
-**`ollama_call.py` — talking to the Oracle**
-This script sends a prompt to Ollama and prints the response. It accepts a system prompt (instructions to the Oracle about its role) and a user prompt (your actual question or content). You can pipe text into it, pass it via command-line argument, or combine both.
+**`oracle_call.py` — talking to the Oracle**
+This is the script your rituals should call when they need to speak to the AI. It is a dispatcher: it reads `oracle_backend` from your `spellbook.conf` and forwards your request to either `ollama_call.py` or `call_lmstudio.py` — whichever backend you have configured. Its command-line interface is identical to both backends, so you can switch backends without changing any ritual or script that calls `oracle_call.py`.
 
 ```bash
-# Ask the oracle a direct question
-python3 infrastructure/scripts/ollama_call.py \
+# Ask the oracle a direct question (backend chosen automatically from conf)
+python3 infrastructure/scripts/oracle_call.py \
 -m granite4:3b \
 -s "You are a helpful assistant." \
 -u "What is the Zettelkasten method?"
 
 # Pipe text into the oracle
-echo "Summarise this note briefly." | python3 infrastructure/scripts/ollama_call.py \
+echo "Summarise this note briefly." | python3 infrastructure/scripts/oracle_call.py \
 -m granite4:3b \
 -s "You are a summariser. Reply in one sentence."
 
 # Request JSON output
-python3 infrastructure/scripts/ollama_call.py \
+python3 infrastructure/scripts/oracle_call.py \
 -m granite4:3b -f json \
 -s "Reply only with valid JSON." \
 -u "List three colours as a JSON array."
 ```
-*(Commands from)*
 
-Because these two scripts are language-agnostic utilities — they accept input, produce output, and communicate via standard terminal conventions — any command-line program in any language can use them. A ritual written in shell, in Python, in Ruby, or in anything else that can run a subprocess can call these scripts and use their output.
+All built-in AI-powered scripts (`zettelkasten_llm.py`, `tagger_llm.py`, `wiki_generator_llm.py`, `query_llm.py`, and the other query-pipeline scripts) call `oracle_call.py`, never the backend scripts directly. When you write your own rituals, follow the same convention.
+
+**`ollama_call.py` and `call_lmstudio.py` — the backend scripts**
+These scripts are the concrete implementations of the oracle interface. `ollama_call.py` speaks to an Ollama instance; `call_lmstudio.py` speaks to an LM Studio instance. Both accept the same arguments. You will rarely need to call them directly — `oracle_call.py` handles that — but they are available if you are testing a specific backend or building a ritual that should always use one engine regardless of your conf setting.
+
+`call_lmstudio.py` connects to LM Studio's OpenAI-compatible API (default: `http://localhost:1234`). If your LM Studio instance is running on a different host or port, pass the `-H` flag.
+
+Because these utility scripts are language-agnostic — they accept input, produce output, and communicate via standard terminal conventions — any command-line program in any language can use them. A ritual written in shell, in Python, in Ruby, or in anything else that can run a subprocess can call these scripts and use their output.
 
 ### A More Ambitious Ritual — Summarising a Note
 Let us write something genuinely useful. A ritual that picks a random note from your collection and asks the Oracle to explain it in plain language.
@@ -403,9 +443,9 @@ files = [f for f in os.listdir(notes_path) if f.endswith('.md')]
 chosen = os.path.join(notes_path, random.choice(files))
 content = open(chosen).read()
 
-# Ask the oracle to explain it
+# Ask the oracle to explain it (oracle_call.py routes to your configured backend)
 result = subprocess.run(
-['python3', 'infrastructure/scripts/ollama_call.py',
+['python3', 'infrastructure/scripts/oracle_call.py',
 '-s', 'Explain this note in one paragraph. Use plain, simple language.',
 '-u', content],
 capture_output=True, text=True).stdout.strip()
@@ -416,13 +456,65 @@ print(result)
 ```
 *(Code from)*
 
-This ritual demonstrates the key pattern: call `config_reader` to find your paths, read your content, pass it to `ollama_call` for processing, and print the result. The ritual is self-contained — it does not modify any files and can be run as often as you like.
+This ritual demonstrates the key pattern: call `config_reader` to find your paths, read your content, pass it to `oracle_call` for processing, and print the result. The ritual is self-contained — it does not modify any files and can be run as often as you like.
 
 > ✦ **The Language-Agnostic Principle:** The Spellbook does not care what language your scripts are written in. Every script is just a command. If you can run it in a terminal, you can put it in a ritual. The built-in scripts happen to be written in Python, but a ritual can call a Ruby script, a Go binary, a shell script, or anything else your computer can execute. The pipeline is the architecture; the language is just a detail.
 
 ---
 
+## Part VI — The Plugin System
+
+*The grimoire you received is complete. The grimoire you will build is better.*
+
+*Plugins are how you extend the Spellbook with your own pipeline steps, your own rituals, and your own AI backends — without touching the core scripts. They are the system's provision for the inevitable moment when you think: I wish it could also do this.*
+
+The Spellbook's plugin system lives in `infrastructure/plugins/`. Each plugin is a subdirectory containing a `plugin.conf` file that identifies it to the system. At startup, the CLI scans this directory, reads every valid `plugin.conf` it finds, and registers each plugin's rituals and components alongside the built-in ones.
+
+### What Plugins Can Do
+
+A plugin can contribute two things:
+
+**Rituals** — new named commands, discovered automatically, available through `spellbook list` and invocable the same way as any built-in ritual.
+
+**Components** — named shortcuts for pipeline steps. Instead of writing the full path to a custom script every time you use it in a ritual, you write a short name like `pdf-reader.to_text`. The CLI expands this to the full invocation before passing the line to the shell.
+
+Beyond new file-format handlers, plugins have been used for alternative oracle backends, pre-processing pipelines that clean input before it reaches the zettelkasten stage, post-processing rituals that export notes to other formats, and entirely independent workflows — journal rituals, review rituals, backup rituals — that have nothing to do with the absorb/focus/sleep cycle.
+
+### Plugin Priority
+
+The discovery process runs in three stages, from lowest to highest priority:
+
+1. **Plugin rituals** — discovered from `infrastructure/plugins/`
+2. **Rituals directory** — discovered from `infrastructure/rituals/`
+3. **spellbook.conf [rituals] entries** — your conf is always the final word
+
+This means you can always override a plugin's ritual by placing a same-named `.ritual` file in `infrastructure/rituals/`, and always override that with an explicit entry in your conf.
+
+### A Minimal Plugin
+
+A plugin requires exactly one file to be recognised by the system: `plugin.conf` at the root of its directory. Everything else is the plugin's own business.
+
+```ini
+; infrastructure/plugins/my-plugin/plugin.conf
+[plugin]
+name    = my-plugin
+version = 1.0
+rituals = rituals/
+
+[components]
+process = python3 scripts/my_script.py
+```
+
+With this in place, any `.ritual` files in `infrastructure/plugins/my-plugin/rituals/` become available as named rituals, and `my-plugin.process` becomes a valid component reference in any ritual file.
+
+### Further Reading
+
+The plugin system is documented in full in `infrastructure/docs/PLUGINS.md`. That document covers every `plugin.conf` key, the component registry and how expansion works, the optional sigil syntax for marking component references, collision handling when two plugins claim the same name, and a complete worked example building a PDF-ingestion plugin from scratch. If you are ready to build, start there.
+
+---
+
 ## Part V — The Obsidian Vault
+
 ### Opening Your Vault
 Obsidian is where you read and navigate everything the Spellbook has built. Think of it as the reading room of your library. The Spellbook is the library. Obsidian is the room where you sit with the books.
 
@@ -469,9 +561,17 @@ Using Obsidian's **tag search** (the Tags pane in the sidebar), you can browse a
 | journal | Path to the `journal/` folder for journal entries. |
 | scripts | Path to the `infrastructure/scripts/` directory. |
 | rituals | Path (absolute or relative) to the `infrastructure/rituals/` directory. |
-| documentation | Path to the `infrastructure/documentation/` directory. |
-| ollama_host | Host and port for Ollama. Default: `127.0.0.1:11434`. |
-| ollama_model | The default Ollama model name to use. Example: `granite4:3b` or `cogito:8b`. |
+| docs | Path to the `infrastructure/docs/` directory. |
+| oracle_backend | Which AI backend to use: `ollama` (default) or `lmstudio`. |
+| oracle_host | Host and port for the Ollama backend. Default: `127.0.0.1:11434`. |
+| oracle_model | The default model name for all AI stages. Example: `granite4:3b`. |
+| tagger_model | Model override for the tagging stage (`tagger_llm.py`). Falls back to `oracle_model`. |
+| zettel_model | Model override for the zettelkasten stage (`zettelkasten_llm.py`). Falls back to `oracle_model`. |
+| query_model | Model override for all query-pipeline stages. Falls back to `oracle_model`. |
+| query_tagger_model | Model override for query tag extraction (`query_tagger_llm.py`). Falls back to `query_model`. |
+| query_llm_model | Model override for the final query answer step (`query_llm.py`). Falls back to `query_model`. |
+| query_max_results | Maximum number of Zettels returned by `query_ranker.py`. Default: 20. |
+| plugin_sigil | Optional character (e.g. `@`) that must prefix component references in ritual files. Leave empty (default) for no sigil. |
 
 **[rituals] Section**
 Each entry in `[rituals]` maps a short name to a ritual file path. Format: `name = path/to/file.ritual`. Paths may be relative to `spellbook.conf`'s location. Named rituals here override any `.ritual` file in the `rituals/` directory with the same name.
@@ -525,27 +625,37 @@ bb infrastructure/scripts/spellbook_cli.clj list
 ## Glossary
 The words below carry specific meaning within the Spellbook. Each carries both a metaphorical weight and a precise technical definition. Use this section when you encounter a word you are uncertain about.
 
-* **Absorb:** The first ritual in the processing cycle. Takes a raw document from the inbox, breaks it into atomic notes via the Oracle, tags those notes, and saves them. Corresponds to the act of reading and processing new material.
+* **Absorb:** The first ritual in the processing cycle. Takes a raw document from the inbox, breaks it into atomic notes via the Oracle, tags those notes, and saves them. Corresponds to the act of reading and processing new material. See also: **Consume** (the looping variant).
 * **Archive:** Both a verb (to archive: to move processed files into long-term storage) and a noun (the archive: the `content/archive/` folder where originals live after processing).
 * **Atomic Note:** A note containing exactly one idea. The fundamental unit of the Zettelkasten method. Atomic notes are easier to link, tag, and retrieve than large composite documents.
 * **Babashka (bb):** A portable Clojure interpreter. The runtime that executes the Spellbook's command-line interface. Babashka is a Lisp-family language runtime bundled as a single executable, which is why the Spellbook works across operating systems without additional setup.
+* **Backend:** The AI engine that powers the Oracle. Currently supported: `ollama` and `lmstudio`. Selected via the `oracle_backend` key in `spellbook.conf`. The `oracle_call.py` dispatcher reads this setting and routes requests accordingly.
 * **Canon Tags:** The approved list of tags defined in the `[tags]` section of `spellbook.conf`. The Oracle selects tags only from this list when processing notes.
 * **Command:** A single instruction executed in a terminal. In a ritual file, each non-comment line is a command.
+* **Component:** A named pipeline step registered by a plugin. Referenced in ritual files as `plugin-name.component-name`. The CLI expands it to a full shell invocation before passing the line to the shell.
+* **Component Registry:** The internal lookup table the CLI builds at startup from all discovered plugin components. Maps short `plugin.component` keys to full shell invocations.
 * **Config Reader:** The utility script `config_reader.py`. Accepts a section name and key name, reads `spellbook.conf`, and prints the corresponding value. Used by all built-in scripts to find their paths.
+* **Consume:** A ritual that runs the full absorb pipeline in a loop until the inbox is empty. Equivalent to invoking absorb repeatedly by hand. Useful for processing a large backlog in one go.
 * **Focus:** The second ritual in the processing cycle. Reads all notes and rebuilds the tag index (tag-hub files). Corresponds to organising and indexing accumulated knowledge.
 * **Grimoire:** Your Spellbook installation directory — the root folder containing `spellbook.conf` and all subdirectories.
 * **Inbox:** The `inbox/` folder. The entry point for new material. Drop raw files here to be processed by the absorb ritual.
 * **INI File:** A simple configuration file format. Sections are marked with `[names in brackets]`. Keys and values are separated by `=` signs. Comments begin with `;` or `#`. `spellbook.conf` is an INI file.
 * **Non-Canon Tags:** Tags found in notes that are not on the approved canonical list. Recorded in the `non-canon-tags` file by the focus ritual. Reviewing this file is how you discover tags the Oracle has invented.
-* **Ollama:** The local AI runtime. Ollama downloads and runs language models on your own machine. The Spellbook uses it for zettelisation, tagging, and wiki generation. Ollama does not send your text to external servers.
-* **Ollama Call:** The utility script `ollama_call.py`. Accepts a model name, a system prompt, and a user prompt, then calls Ollama and prints the response. Used by all AI-powered scripts.
-* **Oracle:** The AI model loaded in Ollama. Different models have different strengths — the Oracle is not a single entity but whichever model you have configured.
-* **Pipeline:** A sequence of commands connected by pipes, where each command's output becomes the next command's input. The absorb ritual is a four-step pipeline.
+* **LM Studio:** An alternative local AI runtime. Like Ollama, it runs language models on your own machine and exposes an API the Spellbook can call. Enable it with `oracle_backend = lmstudio` in your conf.
+* **Ollama:** A local AI runtime that downloads and runs language models on your own machine. The default oracle backend. Does not send your text to external servers.
+* **Ollama Call:** The backend script `ollama_call.py`. Accepts a model name, a system prompt, and a user prompt, then calls Ollama and prints the response. Called by `oracle_call.py`; rarely invoked directly.
+* **Oracle:** The AI layer of the Spellbook. Not a single program but an abstraction: `oracle_call.py` dispatches every AI request to whichever backend you have configured. Different models and different backends have different strengths — the Oracle is whichever combination you have set up.
+* **Oracle Call:** The dispatcher script `oracle_call.py`. Reads `oracle_backend` from `spellbook.conf` and forwards every request to the appropriate backend script. This is what all built-in AI-powered scripts call. Your own rituals should do the same.
+* **Pipeline:** A sequence of commands connected by pipes, where each command's output becomes the next command's input. The absorb ritual is a four-step pipeline; the query ritual is a seven-step pipeline.
+* **Plugin:** A self-contained extension to the Spellbook, living in `infrastructure/plugins/`, identified by the presence of a `plugin.conf` file. A plugin may contribute rituals, pipeline components, or both. See `infrastructure/docs/PLUGINS.md` for the full specification.
+* **plugin.conf:** The INI-format configuration file that identifies a directory as a Spellbook plugin and declares its rituals directory and component invocations. The only required structural element for a valid plugin.
 * **Pipe:** The `|` character. Connects two commands so that the output of the left command becomes the input of the right command.
 * **Ritual:** A plain text file (extension `.ritual`) containing a sequence of shell commands to be run in order. The fundamental unit of automation in the Spellbook.
 * **Script:** A file containing code in any programming language. Scripts perform specific, reusable tasks. They can be called from rituals, from other scripts, or directly from the terminal.
 * **Shell:** The program that interprets terminal commands. On Mac and Linux, this is typically Bash or Zsh. On Windows, it may be Command Prompt or PowerShell. Ritual commands are run through the shell.
-* **Sleep:** The third ritual in the processing cycle. Uses the tag index to generate wiki pages from notes. Corresponds to the synthesis and summarisation of accumulated knowledge.
+* **Query:** A ritual that accepts a natural-language question and searches your knowledge graph to produce a prose answer. A seven-stage pipeline. The `query-cited` variant appends a references section to the answer.
+* **Sigil:** An optional prefix character (e.g. `@`) configured via `plugin_sigil` in `spellbook.conf`. When set, only tokens beginning with the sigil are treated as component references in ritual files. Useful when rituals grow complex and you want component references to stand out visually.
+* **Sleep:** The third ritual in the processing cycle. Uses the tag index to generate wiki pages from notes. Corresponds to the synthesis and summarisation of accumulated knowledge. The `wiki` ritual is a standalone alias for this step.
 * **spellbook.conf:** The configuration file at the root of your installation. Defines all paths, settings, tags, and ritual registrations. An INI-formatted text file.
 * **Tag:** A hashtag within a note (e.g. `#philosophy`, `#todo`) that associates it with a topic. Tags are how the Spellbook connects notes to each other and to wiki pages.
 * **Tag Hub:** A generated index file (`tag-hub-{tagname}`) listing every note associated with a given tag. Lives in `content/maps/tag-hub/`.

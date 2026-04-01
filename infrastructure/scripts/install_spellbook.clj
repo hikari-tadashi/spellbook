@@ -231,7 +231,7 @@
   (println (str DIM "  The Spellbook speaks through an oracle called Ollama. It may" RESET))
   (println (str DIM "  reside on this machine, or on a server elsewhere on your network." RESET))
   (println)
-  (let [default-host (or (get conf-map "ollama_host") "127.0.0.1:11434")]
+  (let [default-host (or (get conf-map "oracle_host") "127.0.0.1:11434")]
     (println "  1) Local  (Ollama runs on this machine)")
     (println "  2) Remote (Ollama runs on another server)")
     (println)
@@ -257,7 +257,7 @@
 ;; ── Model selection ───────────────────────────────────────────────────────────
 
 (defn choose-model [conf-map]
-  (let [default-model (or (get conf-map "ollama_model") "granite4:3b")]
+  (let [default-model (or (get conf-map "oracle_model") "granite4:3b")]
     (println)
     (println (str MAGENTA DIM "  ~ Which spirit shall inhabit the Spellbook's mind?  ~" RESET))
     (println (str DIM "  Each model is a different familiar — some swift and nimble," RESET))

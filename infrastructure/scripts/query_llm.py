@@ -6,7 +6,7 @@ import argparse
 
 MODEL = "cogito:8b"
 HOST  = "http://localhost:11434"
-OLLAMA_CALL   = os.path.join(os.path.dirname(__file__), "ollama_call.py")
+ORACLE_CALL   = os.path.join(os.path.dirname(__file__), "oracle_call.py")
 CONFIG_READER = os.path.join(os.path.dirname(__file__), "config_reader.py")
 
 
@@ -81,7 +81,7 @@ def main():
 
     try:
         result = subprocess.run(
-            ["python3", OLLAMA_CALL, "-m", MODEL, "-H", HOST,
+            ["python3", ORACLE_CALL, "-m", MODEL, "-H", HOST,
              "-s", SYSTEM_PROMPT, "-u", user_prompt],
             capture_output=True, text=True, check=True
         )

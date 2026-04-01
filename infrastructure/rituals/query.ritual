@@ -9,4 +9,4 @@
 #
 # Output: prose answer written for a human reader.
 # For cited output, run: spellbook query-cited
-python3 infrastructure/scripts/query_args_handler.py | python3 infrastructure/scripts/query_tagger.py | python3 infrastructure/scripts/wiki_retriever.py | python3 infrastructure/scripts/zettel_aggregator.py | python3 infrastructure/scripts/query_ranker.py | python3 infrastructure/scripts/context_assembler.py | python3 infrastructure/scripts/query_llm.py --mode prose
+python3 infrastructure/scripts/query_args_handler.py | python3 infrastructure/scripts/query_tagger_llm.py | python3 infrastructure/scripts/wiki_retriever.py | python3 infrastructure/scripts/zettel_aggregator.py | python3 infrastructure/scripts/query_ranker.py | python3 infrastructure/scripts/context_assembler.py | python3 infrastructure/scripts/query_llm.py --mode prose

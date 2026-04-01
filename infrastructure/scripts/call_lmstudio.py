@@ -26,7 +26,7 @@ import argparse
 import requests
 
 
-DEFAULT_MODEL   = "cogito:8b"
+DEFAULT_MODEL   = "qwen/qwen3.5-9b"
 DEFAULT_HOST    = "http://localhost:1234"
 DEFAULT_TIMEOUT = 600
 

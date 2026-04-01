@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 # trying out granite, lets see how IBM does
 MODEL = "granite4:3b"
 HOST  = "http://localhost:11434"
-OLLAMA_CALL = os.path.join(os.path.dirname(__file__), "ollama_call.py")
+ORACLE_CALL = os.path.join(os.path.dirname(__file__), "oracle_call.py")
 CONFIG_READER = os.path.join(os.path.dirname(__file__), "config_reader.py")
 
 MAX_RETRIES = 3
@@ -53,7 +53,7 @@ def get_tags(content):
     # the garden process downstream is responsible for normalising and curating tags.
     try:
         result = subprocess.run(
-            ["python3", OLLAMA_CALL, "-m", MODEL, "-H", HOST,
+            ["python3", ORACLE_CALL, "-m", MODEL, "-H", HOST,
              "-s", f"Select tags strictly from this list: [{ALLOWED_TAGS}]. Avoid 'other' unless necessary. Use tags moderately. Return ONLY the selected tags formatted with hash signs (e.g. #science #logic).",
              "-u", content],
             capture_output=True, text=True, check=True

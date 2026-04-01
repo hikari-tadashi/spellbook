@@ -5,7 +5,7 @@ import shutil
 import datetime
 import subprocess
 
-OLLAMA_CALL = os.path.join(os.path.dirname(__file__), "ollama_call.py")
+ORACLE_CALL = os.path.join(os.path.dirname(__file__), "oracle_call.py")
 CONFIG_READER = os.path.join(os.path.dirname(__file__), "config_reader.py")
 
 def get_config(section, key):
@@ -71,7 +71,7 @@ def call_ollama(tag, source_texts, model, host):
     print(f"  Sending request to Ollama (Model: {model}) for tag '{tag}'...")
     try:
         result = subprocess.run(
-            ["python3", OLLAMA_CALL, "-m", model, "-H", host,
+            ["python3", ORACLE_CALL, "-m", model, "-H", host,
              "-s", "You are an expert knowledge base curator. Write in Obsidian Markdown format."],
             input=prompt, capture_output=True, text=True, check=True
         )

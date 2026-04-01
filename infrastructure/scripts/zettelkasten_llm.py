@@ -9,7 +9,7 @@ from datetime import datetime
 
 MODEL = "cogito:8b"
 HOST  = "http://localhost:11434"
-OLLAMA_CALL = os.path.join(os.path.dirname(__file__), "ollama_call.py")
+ORACLE_CALL = os.path.join(os.path.dirname(__file__), "oracle_call.py")
 CONFIG_READER = os.path.join(os.path.dirname(__file__), "config_reader.py")
 
 MAX_RETRIES = 3
@@ -61,7 +61,7 @@ def get_zettel_json(content):
         #   "-f", "json",
         # after "-H", HOST in the list below.
         result = subprocess.run(
-            ["python3", OLLAMA_CALL, "-m", MODEL, "-H", HOST,
+            ["python3", ORACLE_CALL, "-m", MODEL, "-H", HOST,
              "-s", "Break the following text into atomic Zettelkasten notes. Return ONLY a raw JSON list of strings, where each string is the content of an individual note. Do not include titles or keys. No markdown formatting, no explanations.",
              "-u", content],
             capture_output=True, text=True, check=True

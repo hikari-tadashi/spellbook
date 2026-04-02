@@ -13,7 +13,7 @@ Options:
     -f, --format    Response format: 'json' or 'text' (default: text)
     -t, --timeout   Request timeout in seconds (default: 300)
     -H, --host      LM Studio host URL (default: http://localhost:1234)
-    -T, --think     Accepted for CLI compatibility; has no effect for LM Studio
+    -T, --think     Enable thinking mode via chat_template_kwargs (e.g. for Qwen3 reasoning models)
 
 Exit codes:
     0 - Success
@@ -61,11 +61,11 @@ def parse_args():
     parser.add_argument("-T", "--think",
                         action="store_true",
                         default=False,
-                        help="Accepted for CLI compatibility; has no effect for LM Studio")
+                        help="Enable thinking mode via chat_template_kwargs (e.g. for Qwen3 reasoning models)")
     return parser.parse_args()
 
 
-def call_lmstudio(model, system_prompt, user_prompt, fmt, timeout, host):
+def call_lmstudio(model, system_prompt, user_prompt, fmt, timeout, host, think=False):
     url = f"{host}/v1/chat/completions"
 
     messages = []
@@ -81,6 +81,8 @@ def call_lmstudio(model, system_prompt, user_prompt, fmt, timeout, host):
 
     if fmt == "json":
         payload["response_format"] = {"type": "json_object"}
+
+    payload["chat_template_kwargs"] = {"enable_thinking": think}
 
     try:
         response = requests.post(url, json=payload, timeout=timeout)
@@ -135,6 +137,7 @@ def main():
         fmt=args.format,
         timeout=args.timeout,
         host=args.host,
+        think=args.think,
     )
 
     print(result)

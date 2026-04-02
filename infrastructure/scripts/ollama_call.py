@@ -13,6 +13,7 @@ Options:
     -f, --format    Response format: 'json' or 'text' (default: text)
     -t, --timeout   Request timeout in seconds (default: 300)
     -H, --host      Ollama host URL (default: http://localhost:11434)
+    -T, --think     Enable thinking mode (default: off)
 
 Exit codes:
     0 - Success

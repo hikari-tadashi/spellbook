@@ -46,6 +46,8 @@ def main():
 
     # Pick random file and print absolute path to stdout
     selected_file = os.path.join(INBOX_DIR, random.choice(files))
+    remaining = len(files) - 1
+    sys.stderr.write(f"[absorb] Processing: {os.path.basename(selected_file)} ({remaining} remaining in inbox)\n")
     print(selected_file)
 
 if __name__ == "__main__":

@@ -1,0 +1,62 @@
+name: Build Spellbook Distributions
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Cross-Platform Binaries
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 1. Install the newest Babashka to execute the build script
+      - name: Setup Babashka
+        uses: turtlequeue/setup-babashka@v1.7.0
+        with:
+          babashka-version: latest
+
+      # 2. Dynamically fetch the latest target binaries
+      - name: Fetch Latest Target Binaries
+        working-directory: infrastructure/plugins/installer
+        run: |
+          mkdir -p bin
+          
+          # Ask the GitHub API for the latest release tag, and strip the 'v' from the front
+          LATEST_VERSION=$(curl -s https://api.github.com/repos/babashka/babashka/releases/latest | jq -r .tag_name | sed 's/v//')
+          
+          echo "The latest Babashka version is $LATEST_VERSION"
+          
+          echo "Downloading Linux static binary..."
+          curl -sLO "https://github.com/babashka/babashka/releases/download/v${LATEST_VERSION}/babashka-${LATEST_VERSION}-linux-amd64-static.tar.gz"
+          tar -xzf "babashka-${LATEST_VERSION}-linux-amd64-static.tar.gz" -C bin/
+          mv bin/bb bin/bb-linux
+          
+          echo "Downloading macOS aarch64 binary..."
+          curl -sLO "https://github.com/babashka/babashka/releases/download/v${LATEST_VERSION}/babashka-${LATEST_VERSION}-macos-aarch64.tar.gz"
+          tar -xzf "babashka-${LATEST_VERSION}-macos-aarch64.tar.gz" -C bin/
+          mv bin/bb bin/bb-mac
+          
+          echo "Downloading Windows amd64 binary..."
+          curl -sLO "https://github.com/babashka/babashka/releases/download/v${LATEST_VERSION}/babashka-${LATEST_VERSION}-windows-amd64.zip"
+          unzip -q "babashka-${LATEST_VERSION}-windows-amd64.zip" -d bin/
+          
+          # Cleanup the downloaded archives
+          rm *.tar.gz *.zip
+
+      - name: Build Distributions
+        working-directory: infrastructure/plugins/installer
+        run: bb dist
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: spellbook-binaries
+          path: infrastructure/plugins/installer/dist/
+          retention-days: 14

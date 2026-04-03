@@ -1,5 +1,5 @@
 # ✦ THE SPELLBOOK ✦
-**A Field Manual for the Apprentice Archivist**
+**An LLM created Personal Knowledge Base**
 ─────────────────────────────
 *Narrated by the Install Wizard* *whose robes are singed, whose patience is vast,* *and whose chief concern is that you succeed.*
 

@@ -96,6 +96,9 @@ def main():
             sys.stderr.write("Error: No file path provided.\n")
             sys.exit(1)
 
+    if not filepath:
+        sys.exit(0)  # Nothing to process; upstream handler resolved this file.
+
     archive_dir = get_config("spellbook", "archive")
 
     try:

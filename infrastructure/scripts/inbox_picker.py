@@ -6,7 +6,6 @@ import json
 import subprocess
 
 CONFIG_READER = os.path.join(os.path.dirname(__file__), "config_reader.py")
-EXTENSIONS = {".md", ".txt"}
 
 def get_config(section, key):
     result = subprocess.run(
@@ -33,22 +32,20 @@ def main():
         sys.stderr.write(f"Error: Directory '{INBOX_DIR}' not found.\n")
         sys.exit(1)
 
-    # Filter files
-    files = [
-        f for f in os.listdir(INBOX_DIR) 
-        if os.path.isfile(os.path.join(INBOX_DIR, f)) 
-        and os.path.splitext(f)[1].lower() in EXTENSIONS
+    candidates = [
+        os.path.join(INBOX_DIR, f)
+        for f in os.listdir(INBOX_DIR)
+        if not f.startswith(".")  # skip hidden files and .DS_Store etc.
     ]
 
-    if not files:
-        sys.stderr.write("Error: No markdown or text files in inbox.\n")
+    if not candidates:
+        sys.stderr.write("Error: No files or folders in inbox.\n")
         sys.exit(1)
 
-    # Pick random file and print absolute path to stdout
-    selected_file = os.path.join(INBOX_DIR, random.choice(files))
-    remaining = len(files) - 1
-    sys.stderr.write(f"[absorb] Processing: {os.path.basename(selected_file)} ({remaining} remaining in inbox)\n")
-    print(selected_file)
+    selected = random.choice(candidates)
+    remaining = len(candidates) - 1
+    sys.stderr.write(f"[absorb] Processing: {os.path.basename(selected)} ({remaining} remaining in inbox)\n")
+    print(selected)
 
 if __name__ == "__main__":
     main()

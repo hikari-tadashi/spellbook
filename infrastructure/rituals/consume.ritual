@@ -1,3 +1,5 @@
 #consume.ritual
 #processes the inbox until it is empty
-bash -c 'while python3 infrastructure/scripts/inbox_picker.py | python3 infrastructure/scripts/zettelkasten_llm.py | python3 infrastructure/scripts/zettel_id_generator.py | python3 infrastructure/scripts/tagger_llm.py; do :; done'
+# TODO: this duplicates the absorb pipeline inline. See infrastructure/docs/dev/PLUGIN_MIGRATION.md
+#       for a proposal to replace this with a !loop directive so it stays in sync with absorb.ritual.
+bash -c 'while python3 infrastructure/scripts/inbox_picker.py | python3 infrastructure/scripts/dispatch.py | python3 infrastructure/scripts/zettel_id_generator.py | python3 infrastructure/scripts/tagger_llm.py; do :; done'

@@ -52,6 +52,8 @@ The table below shows the Spellbook's terms alongside their plain-language meani
 | Install Wizard | The setup guide | The installation script — and, by extension, this narrator |
 | Canon Tags | Your approved vocabulary | A list of tags the system recognises as valid for categorisation |
 | Archive | Processed storage | A folder where original files are moved after being processed |
+| Shelf | Long-term folder storage | A folder moved intact to `content/shelves/`, preserved in its original structure with an anchor zettel linking back to it |
+| Absorber | A content handler | A script that receives inbox content and converts it into zettel-ready JSON — either built-in or registered by a plugin |
 | Pipeline | A chain of steps | A sequence of programs where each one's output feeds the next's input |
 
 ### The Architecture at a Glance
@@ -65,13 +67,14 @@ The Spellbook's architecture has three layers, each built on top of the previous
 The flow of information through the system looks like this:
 
 ```text
-[ Your raw notes ]
+[ Your raw notes and folders ]
 │
 ▼
-[ inbox/ folder ] ← You drop files here
+[ inbox/ folder ] ← You drop files and folders here
 │
 ▼ (absorb ritual)
-[ Oracle breaks text into Zettels ]
+[ dispatch: file? → Oracle breaks text into Zettels ]
+[           folder? → Oracle writes an anchor zettel, folder moves to shelves/ ]
 │
 ▼ (Oracle assigns tags)
 [ content/notes/ ] ← Atomic, tagged notes
@@ -101,11 +104,14 @@ When you installed the Spellbook, the Install Wizard created the following folde
 
 ```text
 spellbook/ ← Your grimoire root
-├── inbox/ ← Drop raw notes here
+├── inbox/ ← Drop raw notes and folders here
 ├── content/
 │ ├── notes/ ← Processed atomic notes (Zettels)
 │ ├── archive/ ← Original files after processing
-│ ├── assets/ ← Images and attachments
+│ ├── shelves/ ← Folders moved here intact, each with an anchor zettel
+│ ├── assets/
+│ │ ├── media/ ← Audio, video, and image files filed from inbox
+│ │ └── data/  ← PDFs, documents, and other non-text files filed from inbox
 │ ├── journal/ ← Journal entries (moved here via command)
 │ └── maps/ ← Generated knowledge maps
 │ ├── tag-hub/ ← Tag index files
@@ -154,12 +160,15 @@ oracle_host = 127.0.0.1:11434   ; used by the ollama backend
 oracle_model = granite4:3b       ; default model for all stages
 
 ; Optional per-stage model overrides (fall back to oracle_model if absent):
-; tagger_model      = granite4:3b   ; used by tagger_llm.py
-; zettel_model      = cogito:8b     ; used by zettelkasten_llm.py
+; tagger_model       = granite4:3b  ; used by tagger_llm.py
+; zettel_model       = cogito:8b    ; used by zettelkasten_llm.py
+; shelf_model = cogito:8b    ; used by shelf_absorber.py for folder summarisation
 ; query_tagger_model = granite4:3b  ; used by query_tagger_llm.py
-; query_llm_model   = cogito:8b     ; used by query_llm.py
-; query_model       = cogito:8b     ; fallback for all query-stage scripts
-; query_max_results = 20            ; max zettels returned by query pipeline
+; query_llm_model    = cogito:8b    ; used by query_llm.py
+; query_model        = cogito:8b    ; fallback for all query-stage scripts
+; query_max_results  = 20           ; max zettels returned by query pipeline
+
+shelves = /home/yourname/Documents/spellbook/content/shelves
 
 ; ── [rituals] — named ritual shortcuts ──────────────────────
 [rituals]
@@ -189,7 +198,7 @@ tasks = todo
 ```
 *(Configuration block from)*
 
-* **The [spellbook] Section:** This section defines where all of your important folders live. These paths are read by every script in the system. If you ever move your installation, updating these paths is all you need to do. The `oracle_backend` key selects which AI engine powers the oracle: `ollama` (the default) or `lmstudio`. The `oracle_host` and `oracle_model` settings provide connection details and the default model name. If you want different stages of the pipeline to use different models — a small, fast model for tagging and a larger model for final synthesis — you can configure per-stage overrides with keys like `tagger_model`, `zettel_model`, and `query_llm_model`. Each stage falls back to `oracle_model` if its specific key is absent.
+* **The [spellbook] Section:** This section defines where all of your important folders live. These paths are read by every script in the system. If you ever move your installation, updating these paths is all you need to do. The `oracle_backend` key selects which AI engine powers the oracle: `ollama` (the default) or `lmstudio`. The `oracle_host` and `oracle_model` settings provide connection details and the default model name. If you want different stages of the pipeline to use different models — a small, fast model for tagging and a larger model for final synthesis — you can configure per-stage overrides with keys like `tagger_model`, `zettel_model`, `shelf_model`, and `query_llm_model`. Each stage falls back to `oracle_model` if its specific key is absent.
 * **The [rituals] Section:** This section registers rituals by name. When you run `spellbook sleep`, the system looks here for an entry named `sleep` and finds the path to its `.ritual` file. Registering a ritual here gives it a short, memorable name. Rituals can also be discovered automatically from the rituals/ directory without being listed here — more on that in Part IV.
 * **The [tags] Section:** This section defines your approved vocabulary for tagging notes. The Oracle uses this list when deciding how to categorise your notes. You can add any tags you like — one per line. The system will not assign tags that aren't on this list, so this is how you keep your knowledge graph consistent.
 * **The [alias] Section:** This section lets you define synonyms. If you write a note with the tag #people and you have an alias that maps people to contacts, the system will treat both as the same tag. This is useful when you want to support multiple spellings or concepts for the same category.
@@ -231,18 +240,21 @@ bb infrastructure/scripts/spellbook_cli.clj list
 > 🧙 **Tip from the Wizard:** If you find yourself typing this command often, you can create a short alias in your terminal. Ask someone comfortable with your operating system to help you set one up — it is a small effort that saves considerable typing over time.
 
 ### The Absorb Ritual
-This is where the magic begins. You have a document — a journal entry, a web article you copied, a piece of research, a meeting note. You place it in your inbox. The absorb ritual picks it up, hands it to the Oracle, and watches as a pile of raw text becomes a set of ordered, tagged, connected thoughts.
+This is where the magic begins. You have a document — a journal entry, a web article you copied, a piece of research, a meeting note. Or perhaps a whole folder of materials from a project, an exported repository, a collection of references. You place it in your inbox. The absorb ritual picks it up, works out what kind of thing it is, and hands it to the appropriate handler. A pile of raw material becomes a set of ordered, tagged, connected thoughts.
 
 **What absorb does, step by step:**
-1. **Step 1:** `inbox_picker.py` selects a random file from your `inbox/`. This script reads `spellbook.conf` to find the inbox path, then picks one file at random. Only .md (Markdown) and .txt files are selected.
-2. **Step 2:** `zettelkasten_llm.py` receives the file path and reads its contents. It sends the full text to the oracle — via `oracle_call.py`, which routes the request to your configured backend — with instructions to break it into atomic notes: one idea per note. The Oracle returns a list of self-contained statements. The original file is then moved to your `archive/` folder.
-3. **Step 3:** `zettel_id_generator.py` assigns each atomic note a unique identifier based on the current timestamp (formatted as YYYYMMDDHHMMSS). This is the Zettelkasten naming convention — each note's name is the moment it was created.
+1. **Step 1:** `inbox_picker.py` selects a random item from your `inbox/`. This may be a file of any type, or an entire folder. Hidden files and dotfiles are skipped; everything else is a candidate.
+2. **Step 2:** `dispatch.py` examines what was picked and routes it. This is the sorting office of the pipeline — it makes exactly one decision, and the rest of the pipeline never needs to know which path was taken. Every path produces the same thing: a JSON list of zettel text, ready for the next stage.
+   * **If the item is a plain-text file** (`.txt`, `.md`, `.rst`, `.org`, and variants): `dispatch.py` calls `zettelkasten_llm.py`, which reads the file's contents and sends the full text to the Oracle — via `oracle_call.py`, which routes the request to your configured backend — with instructions to break it into atomic notes: one idea per note. The Oracle returns a list of self-contained statements. The original file is then moved to your `archive/` folder.
+   * **If the item is a folder:** `dispatch.py` calls `shelf_absorber.py`, which moves the folder intact to `content/shelves/`, preserving its entire structure. The script reads the folder's file tree and any readable documents at the root level, then asks the Oracle to write a single anchor zettel summarising what the folder contains, its apparent purpose, and its key themes. The anchor zettel includes a link back to the shelf location so the folder is always traceable from your notes.
+   * **If the item is any other file type** (audio, video, images, PDFs, documents, etc.): `dispatch.py` calls `unknown_absorber.py`, which moves the file to `assets/media/` (for audio, video, and images) or `assets/data/` (for everything else). The Oracle is given the filename and extension and asked to write a brief zettel recording the file's arrival and its new location. The file is preserved intact; the zettel serves as a record and a link. This is a holding pattern — to process these files properly, see the plugin system in `infrastructure/docs/PLUGINS.md`.
+3. **Step 3:** `zettel_id_generator.py` assigns each note a unique identifier based on the current timestamp (formatted as YYYYMMDDHHMMSS). This is the Zettelkasten naming convention — each note's name is the moment it was created.
 4. **Step 4:** `tagger_llm.py` sends each note to the oracle again, this time asking it to select appropriate tags from your canonical tag list. The tags are appended to the note, and the note is saved to `content/notes/`.
 
 ```bash
 # absorb.ritual — the full pipeline
 python3 infrastructure/scripts/inbox_picker.py \
-| python3 infrastructure/scripts/zettelkasten_llm.py \
+| python3 infrastructure/scripts/dispatch.py \
 | python3 infrastructure/scripts/zettel_id_generator.py \
 | python3 infrastructure/scripts/tagger_llm.py
 ```
@@ -310,7 +322,7 @@ Here is the absorb ritual, in full:
 ```bash
 # absorb.ritual
 # Absorbs notes in the inbox and processes them
-python3 infrastructure/scripts/inbox_picker.py | python3 infrastructure/scripts/zettelkasten_llm.py | python3 infrastructure/scripts/zettel_id_generator.py | python3 infrastructure/scripts/tagger_llm.py
+python3 infrastructure/scripts/inbox_picker.py | python3 infrastructure/scripts/dispatch.py | python3 infrastructure/scripts/zettel_id_generator.py | python3 infrastructure/scripts/tagger_llm.py
 ```
 *(Code from)*
 
@@ -507,6 +519,27 @@ process = python3 scripts/my_script.py
 
 With this in place, any `.ritual` files in `infrastructure/plugins/my-plugin/rituals/` become available as named rituals, and `my-plugin.process` becomes a valid component reference in any ritual file.
 
+### Registering a Custom Absorber
+
+Plugins can also intercept the absorb pipeline's routing stage. When `dispatch.py` picks up an item from the inbox, it checks `infrastructure/plugins/` before falling back to the built-in absorbers. If your plugin's `plugin.conf` declares a `[dispatch]` section, its handler will be called instead.
+
+```ini
+; infrastructure/plugins/my-plugin/plugin.conf
+[plugin]
+name    = my-plugin
+version = 1.0
+
+[dispatch]
+handles_folders = scripts/my_folder_handler.py
+handles_files   = scripts/my_file_handler.py
+```
+
+`handles_folders` replaces `shelf_absorber.py` for all folder-type inbox items. `handles_files` replaces `zettelkasten_llm.py` for all file-type inbox items. Either key may be omitted — if only one is declared, the built-in handler covers the other.
+
+A custom absorber receives the item path on stdin and must write a JSON list of zettel strings to stdout — the same format `zettelkasten_llm.py` and `shelf_absorber.py` produce. The rest of the pipeline (`zettel_id_generator.py` and `tagger_llm.py`) does not know or care which absorber ran.
+
+If multiple plugins declare handlers for the same key, the first one found in alphabetical order by plugin directory name takes priority. The built-in absorbers are always the last resort.
+
 ### Further Reading
 
 The plugin system is documented in full in `infrastructure/docs/PLUGINS.md`. That document covers every `plugin.conf` key, the component registry and how expansion works, the optional sigil syntax for marking component references, collision handling when two plugins claim the same name, and a complete worked example building a PDF-ingestion plugin from scratch. If you are ready to build, start there.
@@ -553,6 +586,7 @@ Using Obsidian's **tag search** (the Tags pane in the sidebar), you can browse a
 | inbox | Path to the folder where raw input files are placed. |
 | notes | Path to the folder where processed Zettel notes are stored. |
 | archive | Path to the folder where original files are moved after processing. |
+| shelves | Path to the folder where ingested folders are moved intact. Defaults to `{archive}/shelves/` if not set. |
 | maps | Path to the `content/maps/` folder containing all generated map files. |
 | taghub | Path to the `tag-hub/` subfolder inside `maps/`. Derived from maps if not set. |
 | wiki | Path to the `wiki/` subfolder inside `maps/`. |
@@ -567,6 +601,7 @@ Using Obsidian's **tag search** (the Tags pane in the sidebar), you can browse a
 | oracle_model | The default model name for all AI stages. Example: `granite4:3b`. |
 | tagger_model | Model override for the tagging stage (`tagger_llm.py`). Falls back to `oracle_model`. |
 | zettel_model | Model override for the zettelkasten stage (`zettelkasten_llm.py`). Falls back to `oracle_model`. |
+| shelf_model | Model override for folder summarisation (`shelf_absorber.py`). Falls back to `oracle_model`. |
 | query_model | Model override for all query-pipeline stages. Falls back to `oracle_model`. |
 | query_tagger_model | Model override for query tag extraction (`query_tagger_llm.py`). Falls back to `query_model`. |
 | query_llm_model | Model override for the final query answer step (`query_llm.py`). Falls back to `query_model`. |
@@ -625,7 +660,8 @@ bb infrastructure/scripts/spellbook_cli.clj list
 ## Glossary
 The words below carry specific meaning within the Spellbook. Each carries both a metaphorical weight and a precise technical definition. Use this section when you encounter a word you are uncertain about.
 
-* **Absorb:** The first ritual in the processing cycle. Takes a raw document from the inbox, breaks it into atomic notes via the Oracle, tags those notes, and saves them. Corresponds to the act of reading and processing new material. See also: **Consume** (the looping variant).
+* **Absorb:** The first ritual in the processing cycle. Takes a raw document or folder from the inbox, routes it through dispatch, breaks it into atomic notes via the Oracle, tags those notes, and saves them. Corresponds to the act of reading and processing new material. See also: **Consume** (the looping variant).
+* **Absorber:** A script that receives inbox content on stdin and returns a JSON list of zettel strings on stdout. The built-in absorbers are `zettelkasten_llm.py` (for files) and `shelf_absorber.py` (for folders). Custom absorbers can be registered in a plugin's `plugin.conf` under the `[dispatch]` section.
 * **Archive:** Both a verb (to archive: to move processed files into long-term storage) and a noun (the archive: the `content/archive/` folder where originals live after processing).
 * **Atomic Note:** A note containing exactly one idea. The fundamental unit of the Zettelkasten method. Atomic notes are easier to link, tag, and retrieve than large composite documents.
 * **Babashka (bb):** A portable Clojure interpreter. The runtime that executes the Spellbook's command-line interface. Babashka is a Lisp-family language runtime bundled as a single executable, which is why the Spellbook works across operating systems without additional setup.
@@ -635,7 +671,8 @@ The words below carry specific meaning within the Spellbook. Each carries both a
 * **Component:** A named pipeline step registered by a plugin. Referenced in ritual files as `plugin-name.component-name`. The CLI expands it to a full shell invocation before passing the line to the shell.
 * **Component Registry:** The internal lookup table the CLI builds at startup from all discovered plugin components. Maps short `plugin.component` keys to full shell invocations.
 * **Config Reader:** The utility script `config_reader.py`. Accepts a section name and key name, reads `spellbook.conf`, and prints the corresponding value. Used by all built-in scripts to find their paths.
-* **Consume:** A ritual that runs the full absorb pipeline in a loop until the inbox is empty. Equivalent to invoking absorb repeatedly by hand. Useful for processing a large backlog in one go.
+* **Consume:** A ritual that runs the full absorb pipeline in a loop until the inbox is empty — files and folders alike.
+* **Dispatch:** The routing stage of the absorb pipeline. `dispatch.py` examines each inbox item, checks the plugin registry for a registered handler, and calls the appropriate absorber — `shelf_absorber.py` for folders, `zettelkasten_llm.py` for files. Its output is always a JSON list of zettel strings, regardless of which path was taken. Equivalent to invoking absorb repeatedly by hand. Useful for processing a large backlog in one go.
 * **Focus:** The second ritual in the processing cycle. Reads all notes and rebuilds the tag index (tag-hub files). Corresponds to organising and indexing accumulated knowledge.
 * **Grimoire:** Your Spellbook installation directory — the root folder containing `spellbook.conf` and all subdirectories.
 * **Inbox:** The `inbox/` folder. The entry point for new material. Drop raw files here to be processed by the absorb ritual.
@@ -653,7 +690,8 @@ The words below carry specific meaning within the Spellbook. Each carries both a
 * **Ritual:** A plain text file (extension `.ritual`) containing a sequence of shell commands to be run in order. The fundamental unit of automation in the Spellbook.
 * **Script:** A file containing code in any programming language. Scripts perform specific, reusable tasks. They can be called from rituals, from other scripts, or directly from the terminal.
 * **Shell:** The program that interprets terminal commands. On Mac and Linux, this is typically Bash or Zsh. On Windows, it may be Command Prompt or PowerShell. Ritual commands are run through the shell.
-* **Query:** A ritual that accepts a natural-language question and searches your knowledge graph to produce a prose answer. A seven-stage pipeline. The `query-cited` variant appends a references section to the answer.
+* **Query:** A ritual that accepts a natural-language question and searches your knowledge graph to produce a prose answer.
+* **Shelf:** A folder that has been ingested by the absorb ritual and moved intact to `content/shelves/`. Its internal structure is fully preserved. An anchor zettel, generated by the Oracle, is written to `content/notes/` and links back to the shelf location — so the folder is always traceable from your knowledge graph. A seven-stage pipeline. The `query-cited` variant appends a references section to the answer.
 * **Sigil:** An optional prefix character (e.g. `@`) configured via `plugin_sigil` in `spellbook.conf`. When set, only tokens beginning with the sigil are treated as component references in ritual files. Useful when rituals grow complex and you want component references to stand out visually.
 * **Sleep:** The third ritual in the processing cycle. Uses the tag index to generate wiki pages from notes. Corresponds to the synthesis and summarisation of accumulated knowledge. The `wiki` ritual is a standalone alias for this step.
 * **spellbook.conf:** The configuration file at the root of your installation. Defines all paths, settings, tags, and ritual registrations. An INI-formatted text file.

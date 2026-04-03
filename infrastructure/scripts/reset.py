@@ -93,22 +93,49 @@ def main():
         ensure_default_dirs()
         print()
 
-    inbox = get_config("inbox")
+    inbox   = get_config("inbox")
     archive = get_config("archive")
-    notes = get_config("notes")
-    maps = get_config("maps")
+    notes   = get_config("notes")
+    maps    = get_config("maps")
+    root    = get_config("root")
 
-    print(f"inbox:   {inbox}")
-    print(f"archive: {archive}")
-    print(f"notes:   {notes}")
-    print(f"maps:    {maps}")
+    try:
+        shelves = get_config("shelves")
+    except subprocess.CalledProcessError:
+        shelves = root / "content" / "shelves"
 
+    assets_media = root / "assets" / "media"
+    assets_data  = root / "assets" / "data"
+
+    print(f"inbox:        {inbox}")
+    print(f"archive:      {archive}")
+    print(f"shelves:      {shelves}")
+    print(f"assets/media: {assets_media}")
+    print(f"assets/data:  {assets_data}")
+    print(f"notes:        {notes}")
+    print(f"maps:         {maps}")
+
+    # Move archived originals back to inbox
     if archive.exists():
         for item in archive.iterdir():
             shutil.move(str(item), inbox / item.name)
     else:
         print(f"warning: archive directory not found, skipping: {archive}")
 
+    # Move shelved folders back to inbox
+    if shelves.exists():
+        for item in shelves.iterdir():
+            shutil.move(str(item), inbox / item.name)
+    else:
+        print(f"warning: shelves directory not found, skipping: {shelves}")
+
+    # Move filed assets back to inbox
+    for assets_dir in (assets_media, assets_data):
+        if assets_dir.exists():
+            for item in assets_dir.iterdir():
+                shutil.move(str(item), inbox / item.name)
+
+    # Wipe processed output
     if notes.exists():
         for item in notes.iterdir():
             shutil.rmtree(item) if item.is_dir() else item.unlink()

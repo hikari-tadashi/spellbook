@@ -1,0 +1,1 @@
+infrastructure/docs/SPELLBOOK_MANUAL.md

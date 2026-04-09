@@ -21,6 +21,13 @@ def get_config(section, key):
     )
     return result.stdout.strip()
 
+def get_canonical_tags():
+    result = subprocess.run(
+        ["python3", CONFIG_READER, "-s", "tags", "--list-keys"],
+        capture_output=True, text=True, check=True
+    )
+    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
 try:
     MODEL = get_config("spellbook", "tagger_model")
 except subprocess.CalledProcessError:
@@ -35,11 +42,10 @@ try:
 except subprocess.CalledProcessError:
     pass
 
-ALLOWED_TAGS = (
-    "contacts, journal, messages, email, todo, calendar, alarm, science, technology, "
-    "engineering, mathematics, fine-arts, music, history, philosophy, logic, computers, "
-    "literature, movies, shows, family, friends, money, finances, business, project, code, other"
-)
+try:
+    ALLOWED_TAGS = ", ".join(get_canonical_tags())
+except subprocess.CalledProcessError:
+    ALLOWED_TAGS = "todo, inbox, reference, archive, journal, people, events, health, finances, home, travel, work, projects, meetings, decisions, goals, learning, book, article, course, idea, question, science, technology, history, philosophy, economics, politics, culture, art, language, writing, music, design"
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Tags notes using an LLM.")

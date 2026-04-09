@@ -12,3 +12,4 @@ projects
 infrastructure/plugins/*
 infrastructure/debug/
 infrastructure/docs/dev
+.aider*

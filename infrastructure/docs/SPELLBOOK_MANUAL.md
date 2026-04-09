@@ -180,16 +180,27 @@ wiki = infrastructure/rituals/wiki.ritual
 
 ; ── [tags] — your canonical tag vocabulary ──────────────────
 [tags]
-journal
 todo
-contacts
+inbox
+reference
+journal
+people
+events
+work
+projects
+idea
+science
+technology
 philosophy
 ; ... and so on
 
 ; ── [alias] — tag aliases ────────────────────────────────────
 [alias]
-contacts = people
-tasks = todo
+contacts     = people
+person       = people
+tasks        = todo
+diary        = journal
+tech         = technology
 
 ; ── [spellbook-ignored] — folders to exclude ─────────────────
 [spellbook-ignored]
@@ -201,7 +212,7 @@ tasks = todo
 * **The [spellbook] Section:** This section defines where all of your important folders live. These paths are read by every script in the system. If you ever move your installation, updating these paths is all you need to do. The `oracle_backend` key selects which AI engine powers the oracle: `ollama` (the default) or `lmstudio`. The `oracle_host` and `oracle_model` settings provide connection details and the default model name. If you want different stages of the pipeline to use different models — a small, fast model for tagging and a larger model for final synthesis — you can configure per-stage overrides with keys like `tagger_model`, `zettel_model`, `shelf_model`, and `query_llm_model`. Each stage falls back to `oracle_model` if its specific key is absent.
 * **The [rituals] Section:** This section registers rituals by name. When you run `spellbook sleep`, the system looks here for an entry named `sleep` and finds the path to its `.ritual` file. Registering a ritual here gives it a short, memorable name. Rituals can also be discovered automatically from the rituals/ directory without being listed here — more on that in Part IV.
 * **The [tags] Section:** This section defines your approved vocabulary for tagging notes. The Oracle uses this list when deciding how to categorise your notes. You can add any tags you like — one per line. The system will not assign tags that aren't on this list, so this is how you keep your knowledge graph consistent.
-* **The [alias] Section:** This section lets you define synonyms. If you write a note with the tag #people and you have an alias that maps people to contacts, the system will treat both as the same tag. This is useful when you want to support multiple spellings or concepts for the same category.
+* **The [alias] Section:** This section lets you define synonyms. Format is `alias = canonical`. If you write a note with the tag #contacts and you have the alias `contacts = people`, the system will treat it as #people. This is useful when you want to support multiple spellings or concepts for the same canonical tag.
 * **The [spellbook-ignored] Section:** This section lists folder names that Obsidian should treat as outside the knowledge graph. The `infrastructure/` folder is ignored by default because the scripts and rituals inside it are not notes — they are machinery. You would not want the Oracle trying to summarise them.
 
 > ✦ **A Note on Paths:** Paths in `spellbook.conf` can be absolute (starting from the root of your drive, like `C:\Users\you\...` or `/home/you/...`) or relative (starting from the location of `spellbook.conf` itself, like `infrastructure/rituals`). The config reader resolves relative paths automatically, so either style works. When in doubt, use absolute paths — they are unambiguous.
@@ -612,7 +623,7 @@ Using Obsidian's **tag search** (the Tags pane in the sidebar), you can browse a
 Each entry in `[rituals]` maps a short name to a ritual file path. Format: `name = path/to/file.ritual`. Paths may be relative to `spellbook.conf`'s location. Named rituals here override any `.ritual` file in the `rituals/` directory with the same name.
 
 **[tags] Section**
-Each non-blank, non-comment line in this section is a canonical tag name. Tags should be lowercase and use hyphens rather than spaces for multi-word tags (e.g. fine-arts, martial-arts). The `tag_hub_generator.py` script reads this section to build the initial tag index.
+Each non-blank, non-comment line in this section is a canonical tag name. Tags should be lowercase and use hyphens rather than spaces for multi-word tags (e.g. book-notes, canon-tags). The `tag_hub_generator.py` script reads this section to build the initial tag index.
 
 **[alias] Section**
 Each entry maps one tag name to another. Format: `alias = canonical`. When a note uses the alias, the system treats it as the canonical tag. Useful for normalising spelling variations or synonyms.

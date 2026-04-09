@@ -92,7 +92,7 @@ def main():
     else:
         # Interactive prompt.
         print("Ask your Spellbook a question, and it will search your notes to answer.")
-        print('(Example: "what do I know about stoicism?" or "summarise my notes on cooking")')
+        print('(Example: "what do I know about stoicism?" or "summarise my notes on philosophy")')
         print()
         raw = input("> ").strip()
         inner_args, inner_remaining = parser.parse_known_args(raw.split())

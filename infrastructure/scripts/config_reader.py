@@ -47,12 +47,17 @@ def parse_args():
         epilog=__doc__,
     )
     parser.add_argument("-s", "--section", required=True, help="Section name")
-    parser.add_argument("-k", "--key", required=True, help="Key name")
+    parser.add_argument("-k", "--key", default=None, help="Key name")
     parser.add_argument("-c", "--config", default=None, help="Path to spellbook.conf")
     parser.add_argument(
         "--no-resolve",
         action="store_true",
         help="Do not resolve relative paths to absolute paths",
+    )
+    parser.add_argument(
+        "--list-keys",
+        action="store_true",
+        help="Print all keys in the section, one per line (ignores --key)",
     )
     return parser.parse_args()
 
@@ -86,6 +91,15 @@ def main():
     if not config.has_section(args.section):
         sys.stderr.write(f"Error: Section [{args.section}] not found in config.\n")
         sys.exit(3)
+
+    if args.list_keys:
+        for key, _ in config.items(args.section):
+            print(key)
+        return
+
+    if not args.key:
+        sys.stderr.write("Error: --key is required unless --list-keys is used.\n")
+        sys.exit(2)
 
     if not config.has_option(args.section, args.key):
         sys.stderr.write(

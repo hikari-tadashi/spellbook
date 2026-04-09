@@ -25,7 +25,7 @@ def scan_notes_for_tags(canon_file, notes_dir, taghub_dir):
     tag_to_files = defaultdict(set)
     non_canon_tags = set()
 
-    # Regex pattern to find tags like #journal, #fine-arts, #todo
+    # Regex pattern to find tags like #journal, #book-notes, #todo
     # It looks for a '#' preceded by a space or the start of a line, 
     # followed by word characters, numbers, underscores, or hyphens.
     tag_pattern = re.compile(r'(?:^|\s)#([\w\-]+)')
